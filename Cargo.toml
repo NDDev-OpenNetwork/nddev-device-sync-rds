@@ -1,0 +1,23 @@
+[package]
+name = "nddev-device-sync-rds"
+version = "0.0.1-alpha.1"
+edition = "2024"
+rust-version = "1.99"
+license = "AGPL-3.0-only"
+authors = ["NDDev OpenNetwork"]
+homepage = "https://nddev.ai"
+repository = "https://github.com/NDDev-OpenNetwork/nddev-device-sync-rds"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+
+[target.'cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))'.dependencies]
+nddev-device-sync-adapter-io = { git = "https://github.com/NDDev-OpenNetwork/nddev-device-sync-agent", rev = "341644980976a08825b194f147b7534321325785" }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+
+tempfile = "3"
+
+[lints.rust]
+unsafe_code = "forbid"
