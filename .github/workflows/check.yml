@@ -30,6 +30,13 @@ jobs:
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - name: Native transport tests
         run: cargo test --locked --workspace
+      - name: Dependency policy and advisory checks
+        if: runner.os == 'Linux'
+        run: |
+          cargo install --locked --version 0.20.2 cargo-deny
+          cargo install --locked --version 0.22.2 cargo-audit
+          cargo deny check
+          cargo audit
       - name: Fetch verified native provider
         if: runner.os == 'Linux'
         env:
