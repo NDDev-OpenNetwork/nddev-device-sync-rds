@@ -1,0 +1,12 @@
+{
+  "repository": "NDDev-OpenNetwork/remote-device-sync",
+  "release": "0.1.0",
+  "linux_asset": "remote-device-sync-0.1.0-x86_64-unknown-linux-gnu.tar.gz",
+  "sha256": "4535bdc503925afef44b2f5a969c4d29e1487e506341cba6b88fcccf89007615",
+  "executables": {
+    "NDS_TEST_RDS": "rds-0.1.0-x86_64-unknown-linux-gnu/rds",
+    "NDS_TEST_RDS_AGENT": "rds-0.1.0-x86_64-unknown-linux-gnu/rds-agent"
+  },
+  "size": 27683163,
+  "attestation": true
+}
