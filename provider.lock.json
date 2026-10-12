@@ -8,5 +8,7 @@
     "NDS_TEST_RDS_AGENT": "rds-0.1.0-x86_64-unknown-linux-gnu/rds-agent"
   },
   "size": 27683163,
-  "attestation": true
+  "attestation": true,
+  "source_commit": "9f4749d6094ed8ae108228a1c1b080a35d6046c1",
+  "attestation_bundle": "providers/rds-0.1.0.sigstore.json"
 }
