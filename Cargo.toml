@@ -6,7 +6,7 @@ rust-version = "1.99"
 license = "AGPL-3.0-only"
 authors = ["NDDev OpenNetwork"]
 homepage = "https://nddev.ai"
-repository = "https://github.com/NDDev-OpenNetwork/nddev-device-sync-rds"
+repository = "https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-rds"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

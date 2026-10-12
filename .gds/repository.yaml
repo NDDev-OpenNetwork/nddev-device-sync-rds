@@ -1,0 +1,42 @@
+schema_version: 1
+repository:
+  id: "repo_01M4R3MGY84VZJS3Z18WKDF1D6"
+  display_name: "nddev-device-sync-rds"
+  roles:
+    - "project"
+  lifecycle: "active"
+provider:
+  type: "github"
+  installation: "installation:github-nddev-technocracy-opennetwork-nds"
+  repository_id: 1412571781
+  owner: "NDDev-Technocracy-OpenNetwork-NDS"
+  name: "nddev-device-sync-rds"
+classification:
+  portfolios:
+    - "portfolio:nddev-technocracy-opennetwork-nds"
+  visibility_contract: "public"
+  data_classification: "public"
+product:
+  purpose: "AGPL-3.0-only NDS adapter. Reads the native RDS manager identity, selection and live sessions through its keyless CLI; no key creation, session mutation, desktop rendering or transport replacement is exposed."
+  capabilities:
+    - "Read-only RDS manager identity and live session observation"
+    - "Keyless CLI boundary with no session mutation"
+policy:
+  profiles:
+    - "repository-default"
+    - "opennetwork-default"
+  rollout_ring: "standard"
+git:
+  default_branch: "main"
+  integration: "pull-request"
+  branch_model: "task-branches"
+  handoff_pr: "preferred"
+  cleanup: "merged-only"
+agent:
+  context_profile: "project-default"
+  generated_agents: false
+  serena:
+    enabled: false
+    provenance_required: false
+release:
+  mode: "none"
