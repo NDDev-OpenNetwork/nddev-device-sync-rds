@@ -3,7 +3,7 @@ name: nddev-device-sync-rds
 version: 0.0.1-alpha.1
 channel: alpha
 license: AGPL-3.0-only
-repository: NDDev-OpenNetwork/nddev-device-sync-rds
+repository: NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-rds
 standards_lock: standarts.lock
 runtime_manifest: contracts/module.json
 platforms: [linux, macos, windows]

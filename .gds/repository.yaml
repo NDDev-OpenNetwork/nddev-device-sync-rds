@@ -7,13 +7,13 @@ repository:
   lifecycle: "active"
 provider:
   type: "github"
-  installation: "installation:github-opennetwork"
+  installation: "installation:github-nddev-technocracy-opennetwork-nds"
   repository_id: 1412571781
-  owner: "NDDev-OpenNetwork"
+  owner: "NDDev-Technocracy-OpenNetwork-NDS"
   name: "nddev-device-sync-rds"
 classification:
   portfolios:
-    - "portfolio:nddev-opennetwork"
+    - "portfolio:nddev-technocracy-opennetwork-nds"
   visibility_contract: "public"
   data_classification: "public"
 product:
