@@ -14,3 +14,9 @@ provider paths used by CI. Acceptance exercises the real pinned native owner
 in isolated temporary state. Linux provider acceptance and portable source
 checks are distinct; an absent provider is unavailable, not a successful stub.
 There is no backup/recovery implementation or private estate configuration.
+
+The pinned provider includes its original public Sigstore provenance bundle in
+`providers/`. CI verifies the archive digest, release workflow, tag, source commit
+and GitHub-hosted runner with `gh attestation verify --bundle`. The signing
+repository remains the identity recorded when the release was issued; verification
+does not depend on GitHub retaining its attestation API entry after a transfer.
