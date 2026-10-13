@@ -52,3 +52,23 @@ own lifetime. The loopback HTTP/WS fixture is not production HTTPS/WSS acceptanc
 Its ephemeral keys and fixture grants do not establish NDS device authorization
 or native trust. This code is a qualification input, not an exported NDS browser
 viewer. Other browsers, Wayland and other native platforms remain unqualified.
+
+The Linux library bootstrap is build tooling, separate from screen activation.
+`scripts/prepare-library-provider.py --destination CACHE --config CONFIG` reuses
+the checked source preparer and emits one consumer-root Cargo override file.
+An optional `--archive` accepts the exact published provider source archive.
+Generated inputs/config stay outside this repository. Consumers supply CONFIG
+to every top-level Cargo command; dependency-local patches are ignored by Cargo.
+Use a dedicated Cargo home with this generated config for external Cargo tools
+as well; the gate rejects tools that silently alter its lockfile/source graph.
+Only `rds-agent/desktop` and `rds-desktop/x11` are selected; the provider GUI,
+portal and owned transport backend are excluded from this first library gate.
+
+`scripts/check-library.py --help` describes the downstream archive/public-Git
+gate. It requires a new output directory, starts with empty controlled Cargo and
+build caches, checks actual source paths/features, dependency policy/licenses and
+compiled artifacts. The source archive SHA is explicit. `--resolve-lock` is only
+for a reviewed initial lock adoption or a newly published NDS source pin; retain
+the resulting Cargo lock for review. Local archive evidence is distinct from the
+public Git-consumer gate after source publication. Neither proves NDS endpoint
+authorization, host/credential activation or integrated Flutter screen runtime.
