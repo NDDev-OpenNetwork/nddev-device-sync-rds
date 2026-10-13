@@ -3,10 +3,48 @@ yanked = "deny"
 [licenses]
 allow = ["AGPL-3.0-only", "Apache-2.0", "BSD-3-Clause", "ISC", "MIT", "Unicode-3.0"]
 confidence-threshold = 0.95
+# Exact native-screen graph entries; source archives retain their license files.
+[[licenses.exceptions]]
+name = "attohttpc"
+version = "=0.30.1"
+allow = ["MPL-2.0"]
+[[licenses.exceptions]]
+name = "foldhash"
+version = "=0.2.0"
+allow = ["Zlib"]
+[[licenses.exceptions]]
+name = "openh264"
+version = "=0.9.8"
+allow = ["BSD-2-Clause"]
+[[licenses.exceptions]]
+name = "openh264-sys2"
+version = "=0.9.8"
+allow = ["BSD-2-Clause"]
+[[licenses.exceptions]]
+name = "spez"
+version = "=0.1.2"
+allow = ["BSD-2-Clause"]
+[[licenses.exceptions]]
+name = "webpki-roots"
+version = "=1.0.9"
+allow = ["CDLA-Permissive-2.0"]
+# Browser relay implementation only; exact published artifacts were reviewed.
+[[licenses.exceptions]]
+name = "async_io_stream"
+version = "=0.3.3"
+allow = ["Unlicense"]
+[[licenses.exceptions]]
+name = "pharos"
+version = "=0.5.3"
+allow = ["Unlicense"]
+[[licenses.exceptions]]
+name = "ws_stream_wasm"
+version = "=0.7.5"
+allow = ["Unlicense"]
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"
 [sources]
 unknown-registry = "deny"
 unknown-git = "deny"
-allow-git = ["https://github.com/NDDev-OpenNetwork/nddev-device-sync-agent"]
+allow-git = ["https://github.com/NDDev-OpenNetwork/nddev-device-sync-agent", "https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-rds"]
