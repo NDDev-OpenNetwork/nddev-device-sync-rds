@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "upstream_commit": "2761dbdb76baee0edc2557b02ac7a90472312ab7",
+  "toolchain": "1.99.0",
+  "target": "x86_64-unknown-linux-gnu",
+  "workspace": {
+    "before_sha256": "da2e019dbae7454492ed154863c5a687ffb978990ab3280d784a722bc8dec179",
+    "after_sha256": "9331538eae408916161db7797becc714e9f1c26147911177edc86d2667e0ead1",
+    "patch": "providers/build-patches/workspace-versions.patch",
+    "patch_sha256": "6ae8167c9f02ef06cad29dba0cfcad5408eaa26e2d92ada377d1ee7ec88ee28d",
+    "entries": 13
+  },
+  "netlink": {
+    "name": "netlink-packet-core",
+    "version": "0.8.2",
+    "archive_sha256": "b897d7bd4f0af82e68d40d0344cf37e97f9c97ddf74a098de3e4da05e96ca395",
+    "archive_size": 24930,
+    "before_manifest_sha256": "ec995249e01585a420d74a6c0dee84c4c1d4b28d041573ec1a790b38831004f2",
+    "after_manifest_sha256": "af2935629ba8abc1fd82e8da1e6f9caee969ada7ef742f5aad61eba7214642f7",
+    "patch": "providers/build-patches/netlink-pastey.patch",
+    "patch_sha256": "0ad84f3b8efcf58b7c2a36313aa14b94b89d1fa4e32ca0c07d4a1a7a2717d3d9"
+  },
+  "macro": {
+    "name": "pastey",
+    "version": "0.2.3",
+    "archive_sha256": "2ee67f1008b1ba2321834326597b8e186293b049a023cdef258527550b9935b4",
+    "archive_size": 20361
+  }
+}
