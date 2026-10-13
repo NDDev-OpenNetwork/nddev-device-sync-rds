@@ -20,3 +20,13 @@ The pinned provider includes its original public Sigstore provenance bundle in
 and GitHub-hosted runner with `gh attestation verify --bundle`. The signing
 repository remains the identity recorded when the release was issued; verification
 does not depend on GitHub retaining its attestation API entry after a transfer.
+
+Screen integration is being qualified separately from the exported read-only API.
+`src/screen.rs` consumes the core-owned `screen` contract; it exposes no input or
+clipboard operations. `scripts/check-screen.py --help` describes the explicit
+core/provider inputs and private output directory. It verifies the desktop source
+and legacy provider, then runs real isolated X11 capture/QUIC/decode, cancellation,
+expiry, revocation and IPC compatibility checks under an owned Xvfb server.
+The qualification lock pins its dependency graph. A changed core package requires
+coordinated lock regeneration and qualification. This is not yet an integrated
+NDS viewer or native platform acceptance beyond Linux X11.
