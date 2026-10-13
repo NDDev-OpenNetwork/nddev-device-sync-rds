@@ -71,6 +71,10 @@ def prepare(destination):
         require(len(entries) == 1 and entries[0].is_dir(), "invalid source archive root")
         entries[0].rename(source)
         unpack.rmdir()
+    expected = {item["path"] for item in tree["tree"] if item["type"] != "tree"}
+    actual = {path.relative_to(source).as_posix() for path in source.rglob("*")
+              if path.is_file() or path.is_symlink()}
+    require(actual == expected, "source tree contains missing or untracked files")
     blobs = 0
     for item in tree["tree"]:
         if item["type"] == "tree":
