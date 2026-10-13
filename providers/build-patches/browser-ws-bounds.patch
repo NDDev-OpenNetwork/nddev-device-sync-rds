@@ -1,0 +1,30 @@
+--- a/src/ws_stream.rs
++++ b/src/ws_stream.rs
+@@ -77,6 +77,7 @@
+ 		let q2    = queue.clone();
+ 		let w2    = waker.clone();
+ 		let ph2   = pharos.clone();
++        let bounded_ws = ws.clone();
+ 
+ 
+ 		// Send the incoming ws messages to the WsMeta object
+@@ -85,6 +86,19 @@
+ 		//
+ 		let on_mesg = Closure::wrap( Box::new( move |msg_evt: MessageEvent|
+ 		{
++            if bounded_ws.ready_state() != WebSocket::OPEN { return; }
++            // Bound the application queue before copying a browser message.
++            // Iroh's relay frame ceiling is 1 MiB; eight slots cap queued data.
++            let data = msg_evt.data();
++            let size = if data.is_instance_of::<ArrayBuffer>() {
++                Uint8Array::new(data.unchecked_ref()).length() as usize
++            } else if data.is_string() { js_sys::JsString::from(data).length() as usize * 3 } else { usize::MAX };
++            if q2.borrow().len() >= 8 || size > 1024 * 1024 {
++                q2.borrow_mut().clear();
++                let _ = bounded_ws.close_with_code_and_reason(4009, "receiver capacity");
++                if let Some(w) = w2.borrow_mut().take() { w.wake(); }
++                return;
++            }
+ 			match WsMessage::try_from( msg_evt )
+ 			{
+ 				Ok (msg) => q2.borrow_mut().push_back( msg ),

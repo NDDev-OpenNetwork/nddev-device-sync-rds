@@ -27,17 +27,17 @@ def files(root):
     return {p.relative_to(root).as_posix(): p for p in root.rglob("*") if p.is_file() or p.is_symlink()}
 
 
-def derive(original, destination, transform, expected_manifest):
+def derive(original, destination, transform, expected_manifest, changed_file="Cargo.toml"):
     if not destination.exists():
         shutil.copytree(original, destination, symlinks=True)
-        manifest = destination / "Cargo.toml"
+        manifest = destination / changed_file
         manifest.write_text(transform(manifest.read_text()))
     originals, derived = files(original), files(destination)
     require(originals.keys() == derived.keys(), "derived build has extra or missing source files")
     for relative, source in originals.items():
         target = derived[relative]
         require(target.resolve().is_relative_to(destination.resolve()), "unsafe derived source link")
-        if relative == "Cargo.toml":
+        if relative == changed_file:
             require(digest(target) == expected_manifest, "derived manifest mismatch")
         elif source.is_symlink():
             require(target.is_symlink() and source.readlink() == target.readlink(), "derived source link mismatch")

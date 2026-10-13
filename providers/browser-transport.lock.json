@@ -1,0 +1,13 @@
+{
+  "name": "ws_stream_wasm",
+  "version": "0.7.5",
+  "archive_sha256": "6c173014acad22e83f16403ee360115b38846fe754e735c5d9d3803fe70c6abc",
+  "archive_size": 30684,
+  "patch": "providers/build-patches/browser-ws-bounds.patch",
+  "patch_sha256": "54069067036733620b3266a6bebd7fc23fa45839ede6cd8531d50fab772fa6b5",
+  "before_source_sha256": "9f05c9fe3617271ef2726c54e68b1821d501222fae37184a649e2aceba5aacc8",
+  "after_source_sha256": "2508d351cbb6f743850e1444f2be365e4871851e60dc05d1707f70b7bb077e0f",
+  "queue_messages": 8,
+  "max_message_bytes": 1048576,
+  "overflow_close_code": 4009
+}
