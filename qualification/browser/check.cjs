@@ -23,7 +23,7 @@ async function ownedFixture() {
   const browser = await chromium.launch({executablePath: browserBin, headless: true});
   const results = [];
   try {
-    for (const scenario of ['changing', 'binding', 'retention', 'expiry', 'static', 'websocket']) {
+    for (const scenario of ['changing', 'binding', 'retained-age', 'expiry-rollback', 'observed-expiry', 'retention', 'expiry', 'static', 'websocket']) {
       const {child, settings} = await ownedFixture();
       const context = await browser.newContext();
       const page = await context.newPage();
@@ -38,6 +38,44 @@ async function ownedFixture() {
         if (scenario === 'binding') {
           const result = await page.evaluate(settings => window.binding_proof_failures(settings), settings);
           assert.deepEqual(result, {invalid: 'invalid_binding_challenge', expired: 401, changed: 401, wrongKey: 401, wrongSubject: 401, valid: 200, replay: 401, closed: 'cancelled'});
+          results.push({scenario, ...result});
+        } else if (['retained-age', 'expiry-rollback', 'observed-expiry'].includes(scenario)) {
+          const result = await page.evaluate(async ({settings, scenario}) => {
+            const transport = await window.raw_transport({...settings, lifetime: scenario === 'expiry-rollback' ? 1500 : 20000});
+            const packet = await transport.next_packet();
+            const wallClock = Date.now;
+            const read = () => {
+              try { packet.take_payload(); return 'accepted'; }
+              catch (error) { return String(error); }
+            };
+            try {
+              if (scenario === 'observed-expiry') {
+                Date.now = () => wallClock() + 60000;
+              } else {
+                Date.now = () => wallClock() - 60000;
+                if (scenario === 'retained-age') {
+                  await new Promise(resolve => setTimeout(resolve, 3500));
+                } else {
+                  // Keep the timer callback pending while the real monotonic
+                  // lease expires; access must reject synchronously in Rust.
+                  const until = performance.now() + 1600;
+                  while (performance.now() < until) {}
+                }
+              }
+              const first = read();
+              Date.now = () => wallClock() - 120000;
+              return {first, repeatedAfterRollback: read(), current: transport.is_current()};
+            } finally {
+              Date.now = wallClock;
+              packet.free();
+              await transport.close();
+              transport.free();
+            }
+          }, {settings, scenario});
+          const expected = scenario === 'retained-age' ? 'stale_frame' : 'expired';
+          assert.equal(result.first, expected);
+          assert.equal(result.repeatedAfterRollback, expected);
+          assert.equal(result.current, scenario === 'retained-age');
           results.push({scenario, ...result});
         } else if (scenario === 'retention') {
           const result = await page.evaluate(async settings => {

@@ -1,8 +1,9 @@
 use crate::wire;
 use iroh::endpoint::SendStream;
+use n0_future::time::Instant;
 use nddev_device_sync_domain::screen::{
-    FIRST_FRAME_TIMEOUT_MS, FRAME_SILENCE_TIMEOUT_MS, MAX_ENCODED_FRAME_BYTES, RETAINED_FRAMES,
-    ViewLease, frame_layout,
+    FIRST_FRAME_TIMEOUT_MS, FRAME_SILENCE_TIMEOUT_MS, FRAME_STALE_MS, MAX_ENCODED_FRAME_BYTES,
+    RETAINED_FRAMES, ViewLease, frame_layout,
 };
 use rds_core::{Codec, DesktopHello, FrameHeader, HelloAck, StreamHello, UniHello, grant::Grant};
 use std::{
@@ -23,8 +24,29 @@ struct State {
     busy: Cell<bool>,
     retained: Cell<u8>,
     expires: Cell<u64>,
+    deadline: Cell<Option<Instant>>,
+    expired: Cell<bool>,
     next: Cell<Option<u64>>,
     waiting_key: Cell<bool>,
+}
+impl State {
+    fn check_live(&self) -> Result<(), JsValue> {
+        if self.expired.get() {
+            return Err(error("expired"));
+        }
+        if self.closed.get() {
+            return Err(error("cancelled"));
+        }
+        let deadline = self.deadline.get().ok_or(error("not_open"))?;
+        if Instant::now() >= deadline || now() >= self.expires.get() {
+            // Observed expiry is terminal, even if wall time moves backwards
+            // or the browser has not dispatched the expiry timer yet.
+            self.expired.set(true);
+            self.closed.set(true);
+            return Err(error("expired"));
+        }
+        Ok(())
+    }
 }
 struct Busy(Rc<State>);
 impl Drop for Busy {
@@ -62,6 +84,8 @@ impl BrowserView {
                 busy: Cell::new(false),
                 retained: Cell::new(0),
                 expires: Cell::new(0),
+                deadline: Cell::new(None),
+                expired: Cell::new(false),
                 next: Cell::new(None),
                 waiting_key: Cell::new(true),
             }),
@@ -73,7 +97,7 @@ impl BrowserView {
         })
     }
     pub fn is_current(&self) -> bool {
-        !self.state.closed.get() && now() < self.state.expires.get()
+        self.state.check_live().is_ok()
     }
     pub fn public_id(&self) -> String {
         self.endpoint.id().to_string()
@@ -123,6 +147,7 @@ impl BrowserView {
             serde_wasm_bindgen::from_value(grant).map_err(|_| error("invalid_grant"))?;
         let issuer: [u8; 32] = issuer.try_into().map_err(|_| error("invalid_issuer"))?;
         let expires = now() + u64::from(lifetime_ms);
+        let deadline = Instant::now() + Duration::from_millis(u64::from(lifetime_ms));
         let lease =
             ViewLease::new(0, 30, 480, expires, now()).map_err(|_| error("invalid_lease"))?;
         let verified = grant
@@ -213,11 +238,20 @@ impl BrowserView {
         let conn = n0_future::time::timeout(Duration::from_secs(10), work)
             .await
             .map_err(|_| error("open_timeout"))??;
-        if self.state.closed.get() || now() >= expires {
+        if self.state.closed.get() {
             conn.close(0u32.into(), b"cancelled");
             return Err(error("cancelled"));
         }
+        if Instant::now() >= deadline || now() >= expires {
+            self.state.expired.set(true);
+            self.state.closed.set(true);
+            conn.close(0u32.into(), b"expired");
+            self.control.lock().await.take();
+            self.events.lock().await.take();
+            return Err(error("expired"));
+        }
         self.state.expires.set(expires);
+        self.state.deadline.set(Some(deadline));
         let expire_conn = conn.clone();
         let expire_state = self.state.clone();
         let (abort, registration) = futures_util::future::AbortHandle::new_pair();
@@ -225,8 +259,8 @@ impl BrowserView {
         wasm_bindgen_futures::spawn_local(async move {
             let _ = futures_util::future::Abortable::new(
                 async move {
-                    n0_future::time::sleep(Duration::from_millis(expires.saturating_sub(now())))
-                        .await;
+                    n0_future::time::sleep_until(deadline).await;
+                    expire_state.expired.set(true);
                     expire_state.closed.set(true);
                     expire_conn.close(0u32.into(), b"expired");
                 },
@@ -238,12 +272,7 @@ impl BrowserView {
         Ok(())
     }
     pub async fn next_packet(&self) -> Result<EncodedPacket, JsValue> {
-        if now() >= self.state.expires.get() {
-            return Err(error("expired"));
-        }
-        if self.state.closed.get() {
-            return Err(error("cancelled"));
-        }
+        self.state.check_live()?;
         if usize::from(self.state.retained.get()) >= RETAINED_FRAMES
             || self.state.busy.replace(true)
         {
@@ -304,17 +333,13 @@ impl BrowserView {
                     self.state.waiting_key.set(false)
                 }
                 self.state.next.set(Some(header.seq + 1));
-                if self.state.closed.get() {
-                    return Err(error("cancelled"));
-                }
-                if now() >= self.state.expires.get() {
-                    return Err(error("expired"));
-                }
+                self.state.check_live()?;
                 self.state.retained.set(self.state.retained.get() + 1);
                 return Ok(EncodedPacket {
                     header,
                     body: RefCell::new(Some(body)),
                     state: self.state.clone(),
+                    received: Instant::now(),
                 });
             }
         };
@@ -324,7 +349,13 @@ impl BrowserView {
             FRAME_SILENCE_TIMEOUT_MS
         };
         let result = n0_future::time::timeout(
-            Duration::from_millis(timeout.min(self.state.expires.get().saturating_sub(now()))),
+            Duration::from_millis(timeout).min(
+                self.state
+                    .deadline
+                    .get()
+                    .ok_or(error("not_open"))?
+                    .saturating_duration_since(Instant::now()),
+            ),
             work,
         )
         .await
@@ -353,6 +384,7 @@ pub struct EncodedPacket {
     header: FrameHeader,
     body: RefCell<Option<Vec<u8>>>,
     state: Rc<State>,
+    received: Instant,
 }
 #[wasm_bindgen]
 impl EncodedPacket {
@@ -369,11 +401,13 @@ impl EncodedPacket {
         self.header.keyframe
     }
     pub fn take_payload(&self) -> Result<Vec<u8>, JsValue> {
-        if now() >= self.state.expires.get() {
-            return Err(error("expired"));
+        if let Err(error) = self.state.check_live() {
+            self.body.borrow_mut().take();
+            return Err(error);
         }
-        if self.state.closed.get() {
-            return Err(error("cancelled"));
+        if self.received.elapsed() >= Duration::from_millis(FRAME_STALE_MS) {
+            self.body.borrow_mut().take();
+            return Err(error("stale_frame"));
         }
         self.body
             .borrow_mut()
