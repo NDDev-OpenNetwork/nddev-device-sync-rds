@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tarfile
 import tomllib
 
@@ -92,8 +93,14 @@ def main():
         raise ValueError("compiled macro dependency differs from verified artifact")
     run(["cargo", "deny", "--manifest-path", str(output / "Cargo.toml"), "--config", str(repo / "deny.toml"), "--target", target, "check"], cwd=output, env=env)
     run(["cargo", "audit", "--file", str(output / "Cargo.lock")], cwd=output, env=env)
-    clippy = subprocess.check_output(["cargo", "clippy", "--locked", "--all-targets", "--target", target, "--message-format=json", "-j", "4", "--", "-D", "warnings"], cwd=output, env=env, text=True)
-    artifacts = [json.loads(line) for line in clippy.splitlines() if line.startswith("{")]
+    clippy = subprocess.run(["cargo", "clippy", "--locked", "--all-targets", "--target", target, "--message-format=json", "-j", "4", "--", "-D", "warnings"], cwd=output, env=env, text=True, stdout=subprocess.PIPE)
+    (output / "clippy.jsonl").write_text(clippy.stdout)
+    artifacts = [json.loads(line) for line in clippy.stdout.splitlines() if line.startswith("{")]
+    if clippy.returncode:
+        for item in artifacts:
+            if item.get("reason") == "compiler-message" and item["message"].get("rendered"):
+                sys.stderr.write(item["message"]["rendered"])
+        raise RuntimeError("screen qualification Clippy failed; diagnostics preserved in the private output")
     features = [{"package_id": item["package_id"], "features": item["features"], "kind": item["target"]["kind"]}
                 for item in artifacts if item.get("reason") == "compiler-artifact"]
     (output / "compiled-features.json").write_text(json.dumps(features, indent=2) + "\n")
