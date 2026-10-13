@@ -28,6 +28,19 @@ allow = ["BSD-2-Clause"]
 name = "webpki-roots"
 version = "=1.0.9"
 allow = ["CDLA-Permissive-2.0"]
+# Browser relay implementation only; exact published artifacts were reviewed.
+[[licenses.exceptions]]
+name = "async_io_stream"
+version = "=0.3.3"
+allow = ["Unlicense"]
+[[licenses.exceptions]]
+name = "pharos"
+version = "=0.5.3"
+allow = ["Unlicense"]
+[[licenses.exceptions]]
+name = "ws_stream_wasm"
+version = "=0.7.5"
+allow = ["Unlicense"]
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"
