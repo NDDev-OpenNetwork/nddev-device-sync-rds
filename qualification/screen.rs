@@ -641,3 +641,70 @@ async fn a_real_stalled_x_server_invalidates_pixels_and_terminates_the_view() {
     view.close().await;
     fixture.close().await;
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_unchanging_x11_image_remains_live_across_multiple_stale_deadlines() {
+    let _marker = Marker::new();
+    let mut fixture = Fixture::new(Backend::Iroh).await;
+    let mut view = fixture
+        .adapter()
+        .open(
+            fixture.request(20_000, vec![ServiceKind::DesktopView]),
+            CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    let session = fixture.client().snapshot().await.unwrap().sessions[0].id;
+    // A second actual native channel independently proves the existing control
+    // heartbeat semantics. It adds no protocol and owns only its own stream.
+    let mut observer = fixture
+        .client()
+        .desktop_profile(
+            Some(session),
+            rds_core::DesktopHello {
+                display: 0,
+                max_fps: 30,
+                codec: rds_core::Codec::H264,
+                input_acks: false,
+            },
+            Some(480),
+        )
+        .await
+        .unwrap();
+    let probe = observer.heartbeat().await.unwrap();
+    tokio::time::timeout(Duration::from_secs(3), async {
+        loop {
+            if let Some(rds_client::local::ManagedMessage::Event(
+                rds_core::DesktopEvent::Heartbeat { seq, .. },
+            )) = observer.recv().await.unwrap()
+                && seq == probe
+            {
+                break;
+            }
+        }
+    })
+    .await
+    .expect("native heartbeat was not echoed on the unchanged desktop");
+    observer.finish().await.unwrap();
+    let started = tokio::time::Instant::now();
+    let mut count = 0;
+    let mut previous = None;
+    while started.elapsed() < Duration::from_secs(8) {
+        let frame = color(&mut view, true).await;
+        if let Some(seq) = previous {
+            assert!(frame.sequence() > seq);
+        }
+        previous = Some(frame.sequence());
+        count += 1;
+        assert!(
+            view.status().is_none(),
+            "unchanged pixels were treated as a stalled source"
+        );
+    }
+    assert!(
+        count >= 4,
+        "the native source did not refresh the unchanged image"
+    );
+    view.close().await;
+    fixture.close().await;
+}
