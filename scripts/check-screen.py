@@ -106,6 +106,8 @@ def main():
     (output / "compiled-features.json").write_text(json.dumps(features, indent=2) + "\n")
     run(["python3", str(repo / "scripts/owned-x11.py"), "--", "cargo", "test", "--locked", "--target", target, "-j", "4", "--", "--test-threads=1"], cwd=output, env=env)
     run(["python3", str(repo / "scripts/owned-x11.py"), "--", "cargo", "nextest", "run", "--locked", "--target", target, "-j", "1"], cwd=output, env=env)
+    wide_env = dict(env, NDS_ULTRAWIDE_FIXTURE="1")
+    run(["python3", str(repo / "scripts/owned-x11.py"), "--screen", "5120x1440x24", "--", "cargo", "test", "--locked", "--target", target, "tests::a_real_ultrawide_source_fits_the_existing_frame_budget", "--", "--ignored", "--exact", "--test-threads=1"], cwd=output, env=wide_env)
     receipt = {"source": json.loads((repo / "providers/screen-source.lock.json").read_text()),
                "build": build_spec,
                "compiled_graph_sha256": hashlib.sha256((output / "compiled-graph.json").read_bytes()).hexdigest(),

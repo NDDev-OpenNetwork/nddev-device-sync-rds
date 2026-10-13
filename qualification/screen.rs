@@ -560,7 +560,7 @@ async fn dropping_a_view_releases_only_its_owned_streams_and_admission() {
     let frame = color(&mut view, true).await;
     let mut progress = ViewProgress::new(1, 0).unwrap();
     progress.received(1, frame.sequence(), 1).unwrap();
-    assert_eq!(progress.phase(1), ScreenPhase::AwaitingPresentation);
+    assert_eq!(progress.phase(1), ScreenPhase::FrameAvailable);
     let before = fixture.client().snapshot().await.unwrap();
     drop(view);
     assert!(frame.pixels().is_none());
@@ -705,6 +705,31 @@ async fn an_unchanging_x11_image_remains_live_across_multiple_stale_deadlines() 
         count >= 4,
         "the native source did not refresh the unchanged image"
     );
+    view.close().await;
+    fixture.close().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore = "requires the explicit owned 5120x1440 X server lane"]
+async fn a_real_ultrawide_source_fits_the_existing_frame_budget() {
+    assert_eq!(std::env::var("NDS_ULTRAWIDE_FIXTURE").as_deref(), Ok("1"));
+    let _marker = Marker::new();
+    let mut fixture = Fixture::new(Backend::Iroh).await;
+    let mut request = fixture.request(20_000, vec![ServiceKind::DesktopView]);
+    request.lease = ViewLease::new(0, 30, 1080, now() + 20_000, now()).unwrap();
+    let mut view = fixture
+        .adapter()
+        .open(request, CancellationToken::new())
+        .await
+        .unwrap();
+    let frame = tokio::time::timeout(Duration::from_secs(8), view.next_frame())
+        .await
+        .unwrap()
+        .unwrap();
+    let (width, height, stride) = frame.dimensions();
+    assert_eq!((width, height), (1920, 540));
+    let pixel = &frame.pixels().unwrap()[(30 * stride + 40 * 4) as usize..][..4];
+    assert!(pixel[2] > 180 && pixel[0] < 70);
     view.close().await;
     fixture.close().await;
 }

@@ -4,6 +4,7 @@ import argparse
 import os
 from pathlib import Path
 import secrets
+import re
 import signal
 import subprocess
 import tempfile
@@ -12,8 +13,11 @@ import time
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--screen", default="640x480x24")
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
+    if not re.fullmatch(r"[1-9][0-9]{1,3}x[1-9][0-9]{1,3}x24", args.screen) or any(int(v) > 8192 for v in args.screen.split("x")[:2]):
+        parser.error("screen geometry exceeds the native capture fixture bound")
     command = args.command[1:] if args.command[:1] == ["--"] else args.command
     if not command:
         parser.error("an acceptance command is required")
@@ -33,7 +37,7 @@ def main():
                     continue
                 display = f":{number}"
                 subprocess.run(["xauth", "-f", str(authority), "add", display, "MIT-MAGIC-COOKIE-1", secrets.token_hex(16)], check=True, stdout=subprocess.DEVNULL)
-                candidate = subprocess.Popen(["Xvfb", display, "-screen", "0", "640x480x24", "-nolisten", "tcp", "-auth", str(authority)], stdout=subprocess.DEVNULL, stderr=log)
+                candidate = subprocess.Popen(["Xvfb", display, "-screen", "0", args.screen, "-nolisten", "tcp", "-auth", str(authority)], stdout=subprocess.DEVNULL, stderr=log)
                 env["DISPLAY"] = display
                 deadline = time.monotonic() + 3
                 while candidate.poll() is None and time.monotonic() < deadline:

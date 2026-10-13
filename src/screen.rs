@@ -230,7 +230,7 @@ impl RdsScreen {
             {
                 return Err(ScreenError::Denied);
             }
-            let desktop = self
+            let mut desktop = self
                 .client
                 .desktop_profile(
                     Some(session),
@@ -244,6 +244,41 @@ impl RdsScreen {
                 )
                 .await
                 .map_err(|_| ScreenError::Module(ModuleError::Unavailable))?;
+            let display = desktop
+                .caps
+                .displays
+                .iter()
+                .find(|display| display.index == request.lease.display())
+                .ok_or(ScreenError::Module(ModuleError::InvalidResponse))?;
+            let fitted = screen::fit_video_height(
+                display.width,
+                display.height,
+                request.lease.output_height(),
+            )
+            .map_err(ScreenError::Module)?;
+            if fitted != request.lease.output_height() {
+                // The greeting supplies the current native inventory. Retire
+                // this owned channel before admitting decode, then negotiate
+                // the core-fitted profile on the same pinned connection.
+                desktop
+                    .finish()
+                    .await
+                    .map_err(|_| ScreenError::Module(ModuleError::ProviderFailed))?;
+                desktop = self
+                    .client
+                    .desktop_profile(
+                        Some(session),
+                        DesktopHello {
+                            display: request.lease.display(),
+                            max_fps: request.lease.max_fps(),
+                            codec: Codec::H264,
+                            input_acks: false,
+                        },
+                        Some(fitted),
+                    )
+                    .await
+                    .map_err(|_| ScreenError::Module(ModuleError::Unavailable))?;
+            }
             Ok(desktop)
         };
         let desktop = tokio::select! {
