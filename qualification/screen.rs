@@ -1,11 +1,12 @@
 use crate::adapter::{OpenView, RdsScreen, ScreenFrame, ScreenView};
 use ed25519_dalek::SigningKey;
-use nddev_device_sync_domain::screen::{ScreenError, ViewLease};
+use nddev_device_sync_domain::screen::{ModuleError, ScreenError, ViewLease};
 use rds_agent::{Agent, AgentPolicy};
 use rds_client::local::{Client, Prepared, Server};
 use rds_core::{
     ServiceKind,
     grant::{Grant, GrantConstraints},
+    local::{Command, Reply, SessionId},
 };
 use rds_net::{Backend, Endpoint, EndpointConfig, Ticket, Transports, bind_endpoint};
 use std::{
@@ -104,6 +105,9 @@ impl Drop for Fixture {
 }
 impl Fixture {
     async fn new(backend: Backend) -> Self {
+        Self::with_desktop(backend, true).await
+    }
+    async fn with_desktop(backend: Backend, desktop: bool) -> Self {
         let cfg = || EndpointConfig {
             backend,
             discovery: false,
@@ -117,7 +121,11 @@ impl Fixture {
         let mut policy = AgentPolicy::ssh_only(("127.0.0.1".into(), 9));
         policy.allow.insert(local.id());
         policy.issuers.insert(issuer.verifying_key().to_bytes());
-        policy.services = Some(BTreeSet::from([ServiceKind::Desktop]));
+        policy.services = Some(if desktop {
+            BTreeSet::from([ServiceKind::Desktop])
+        } else {
+            BTreeSet::new()
+        });
         policy.use_local_revocations();
         let agent = Arc::new(Agent::new(remote.clone(), policy.clone()));
         let serving = agent.clone();
@@ -145,6 +153,29 @@ impl Fixture {
     }
     fn client(&self) -> Client {
         Client::new(self.root.path().join("control"))
+    }
+    async fn info_session(&self) -> SessionId {
+        let grant = Grant::issue(
+            &self.issuer,
+            *self.local.id().as_bytes(),
+            *self.remote.id().as_bytes(),
+            rand::random(),
+            vec![ServiceKind::Info],
+            Duration::from_secs(30),
+            GrantConstraints::default(),
+        );
+        match self
+            .client()
+            .request(Command::Connect {
+                target: Ticket::of(&self.remote).to_string(),
+                grant: Some(Box::new(grant)),
+            })
+            .await
+            .unwrap()
+        {
+            Reply::Connected(session) => session,
+            _ => panic!("native owner did not connect its Info-scoped session"),
+        }
     }
     fn request(&self, lifetime_ms: u64, scopes: Vec<ServiceKind>) -> OpenView {
         let grant = Grant::issue(
@@ -224,7 +255,7 @@ async fn cancelled_frames_are_inaccessible_before_the_worker_runs_again() {
     assert!(frame.pixels().is_none());
     assert!(matches!(
         view.next_frame().await,
-        Err(ScreenError::Cancelled)
+        Err(ScreenError::Module(ModuleError::Cancelled))
     ));
     view.close().await;
     fixture.close().await;
@@ -245,7 +276,7 @@ async fn actual_x11_pixels_cross_managed_quic_and_cancel_under_retention_pressur
         let another = fixture.request(10_000, vec![ServiceKind::DesktopView]);
         assert!(matches!(
             adapter.open(another, CancellationToken::new()).await,
-            Err(ScreenError::Busy)
+            Err(ScreenError::Module(ModuleError::Busy))
         ));
         marker.color(0x0000ff);
         let second = color(&mut view, false).await;
@@ -256,11 +287,14 @@ async fn actual_x11_pixels_cross_managed_quic_and_cancel_under_retention_pressur
             "retained frame limit was bypassed"
         );
         token.cancel();
-        assert_eq!(ended(&view).await, ScreenError::Cancelled);
+        assert_eq!(
+            ended(&view).await,
+            ScreenError::Module(ModuleError::Cancelled)
+        );
         assert!(first.pixels().is_none() && second.pixels().is_none());
         assert!(matches!(
             view.next_frame().await,
-            Err(ScreenError::Cancelled)
+            Err(ScreenError::Module(ModuleError::Cancelled))
         ));
         view.close().await;
         let after = fixture.client().snapshot().await.unwrap();
@@ -318,7 +352,7 @@ async fn grant_scope_rejection_and_native_revocation_end_real_video() {
     fixture.policy.revoke(grant_id);
     assert!(matches!(
         ended(&view).await,
-        ScreenError::Closed | ScreenError::Unavailable
+        ScreenError::Closed | ScreenError::Module(ModuleError::Unavailable)
     ));
     assert!(first.pixels().is_none());
     view.close().await;
@@ -432,9 +466,178 @@ async fn actual_pinned_legacy_manager_refuses_the_v5_client() {
     .await
     .unwrap();
     assert!(matches!(
-        Client::new(control).snapshot().await,
+        Client::new(&control).snapshot().await,
         Err(rds_client::local::Error::Rejected(
             rds_core::local::ErrorCode::Version
         ))
     ));
+    assert!(matches!(
+        RdsScreen::new(control)
+            .unwrap()
+            .capabilities(SessionId([0; 16]), [0; 32], CancellationToken::new())
+            .await,
+        Err(ModuleError::InvalidContract)
+    ));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn discovery_reports_actual_inventory_and_disabled_service_without_claiming_watching() {
+    use nddev_device_sync_domain::{
+        modules::{ModuleObservation, ModuleOutcome, query_outcome},
+        screen::{ScreenPhase, ScreenSupport, ViewProgress},
+        state::Reachability,
+    };
+    let _marker = Marker::new();
+    for enabled in [true, false] {
+        let mut fixture = Fixture::with_desktop(Backend::Iroh, enabled).await;
+        let session = fixture.info_session().await;
+        let adapter = fixture.adapter();
+        let before = fixture.client().snapshot().await.unwrap();
+        let result = adapter
+            .capabilities(
+                session,
+                *fixture.remote.id().as_bytes(),
+                CancellationToken::new(),
+            )
+            .await;
+        assert_eq!(query_outcome(&result), ModuleOutcome::Completed);
+        let mut observation = ModuleObservation {
+            id: "rds".into(),
+            version: "0.0.1-alpha.1".into(),
+            configured: true,
+            reachability: Reachability::NotChecked,
+            observed_at_ms: None,
+            error: None,
+        };
+        observation.observe(&result, Some(now()));
+        assert!(observation.reachability == Reachability::Reachable);
+        let caps = result.unwrap();
+        if enabled {
+            assert!(caps.support == ScreenSupport::Supported);
+            assert!(
+                caps.displays
+                    .iter()
+                    .any(|d| d.id == 0 && d.width == 640 && d.height == 480)
+            );
+        } else {
+            assert!(caps.support == ScreenSupport::ServiceDisabled);
+            assert!(caps.displays.is_empty());
+        }
+        let progress = ViewProgress::new(1, 0).unwrap();
+        assert_eq!(progress.phase(0), ScreenPhase::AwaitingFrame);
+        assert_eq!(
+            before.generation,
+            fixture.client().snapshot().await.unwrap().generation
+        );
+        assert!(matches!(
+            adapter
+                .capabilities(session, [0; 32], CancellationToken::new())
+                .await,
+            Err(ModuleError::InvalidInput)
+        ));
+        fixture.close().await;
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn dropping_a_view_releases_only_its_owned_streams_and_admission() {
+    use nddev_device_sync_domain::screen::{ScreenPhase, ViewProgress};
+    let _marker = Marker::new();
+    let mut fixture = Fixture::new(Backend::Iroh).await;
+    let adapter = fixture.adapter();
+    let request = fixture.request(20_000, vec![ServiceKind::DesktopView]);
+    let retry = OpenView {
+        target: request.target.clone(),
+        peer: request.peer,
+        issuer: request.issuer,
+        grant: request.grant.clone(),
+        lease: request.lease,
+    };
+    let mut view = adapter
+        .open(request, CancellationToken::new())
+        .await
+        .unwrap();
+    let frame = color(&mut view, true).await;
+    let mut progress = ViewProgress::new(1, 0).unwrap();
+    progress.received(1, frame.sequence(), 1).unwrap();
+    assert_eq!(progress.phase(1), ScreenPhase::AwaitingPresentation);
+    let before = fixture.client().snapshot().await.unwrap();
+    drop(view);
+    assert!(frame.pixels().is_none());
+    tokio::time::timeout(Duration::from_secs(3), async {
+        while fixture.agent.active_streams() != 0 {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let after = fixture.client().snapshot().await.unwrap();
+    assert_eq!(before.selected, after.selected);
+    assert_eq!(before.generation, after.generation);
+    let mut restarted = adapter.open(retry, CancellationToken::new()).await.unwrap();
+    let _new_frame = color(&mut restarted, true).await;
+    restarted.close().await;
+    fixture.close().await;
+}
+
+struct PausedSource(u32);
+impl PausedSource {
+    fn new() -> Self {
+        let pid: u32 = std::env::var("NDS_OWNED_XVFB_PID")
+            .expect("owned X server PID required")
+            .parse()
+            .unwrap();
+        let command = std::fs::read(format!("/proc/{pid}/cmdline")).unwrap();
+        let arguments: Vec<_> = command.split(|byte| *byte == 0).collect();
+        assert!(
+            std::path::Path::new(std::str::from_utf8(arguments[0]).unwrap())
+                .file_name()
+                .unwrap()
+                == "Xvfb"
+        );
+        assert!(
+            arguments
+                .iter()
+                .any(|a| *a == std::env::var("XAUTHORITY").unwrap().as_bytes())
+        );
+        assert!(
+            std::process::Command::new("kill")
+                .args(["-STOP", "--", &pid.to_string()])
+                .status()
+                .unwrap()
+                .success()
+        );
+        Self(pid)
+    }
+}
+impl Drop for PausedSource {
+    fn drop(&mut self) {
+        let _ = std::process::Command::new("kill")
+            .args(["-CONT", "--", &self.0.to_string()])
+            .status();
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_real_stalled_x_server_invalidates_pixels_and_terminates_the_view() {
+    let _marker = Marker::new();
+    let mut fixture = Fixture::new(Backend::Iroh).await;
+    let mut view = fixture
+        .adapter()
+        .open(
+            fixture.request(20_000, vec![ServiceKind::DesktopView]),
+            CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    let frame = color(&mut view, true).await;
+    let paused = PausedSource::new();
+    assert_eq!(
+        ended(&view).await,
+        ScreenError::Module(ModuleError::Timeout)
+    );
+    assert!(frame.pixels().is_none());
+    drop(paused);
+    view.close().await;
+    fixture.close().await;
 }

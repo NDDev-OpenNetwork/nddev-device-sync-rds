@@ -30,3 +30,10 @@ expiry, revocation and IPC compatibility checks under an owned Xvfb server.
 The qualification lock pins its dependency graph. A changed core package requires
 coordinated lock regeneration and qualification. This is not yet an integrated
 NDS viewer or native platform acceptance beyond Linux X11.
+
+Capability discovery reads an explicitly authorized Info-scoped native session;
+the view grant remains DesktopView-only. Discovery preserves selection and cannot
+claim Watching. The adapter uses shared core module errors/observations, rejects
+stale frame access and terminates when an owned source stops producing frames.
+Acceptance now owns its X server lifetime and can pause that exact server to
+exercise source loss without touching an ambient desktop.

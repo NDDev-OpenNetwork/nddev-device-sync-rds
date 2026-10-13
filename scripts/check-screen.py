@@ -104,10 +104,8 @@ def main():
     features = [{"package_id": item["package_id"], "features": item["features"], "kind": item["target"]["kind"]}
                 for item in artifacts if item.get("reason") == "compiler-artifact"]
     (output / "compiled-features.json").write_text(json.dumps(features, indent=2) + "\n")
-    run(["xvfb-run", "-a", "-n", "200", "-s", "-screen 0 640x480x24 -nolisten tcp",
-         "cargo", "test", "--locked", "--target", target, "-j", "4", "--", "--test-threads=1"], cwd=output, env=env)
-    run(["xvfb-run", "-a", "-n", "200", "-s", "-screen 0 640x480x24 -nolisten tcp",
-         "cargo", "nextest", "run", "--locked", "--target", target, "-j", "1"], cwd=output, env=env)
+    run(["python3", str(repo / "scripts/owned-x11.py"), "--", "cargo", "test", "--locked", "--target", target, "-j", "4", "--", "--test-threads=1"], cwd=output, env=env)
+    run(["python3", str(repo / "scripts/owned-x11.py"), "--", "cargo", "nextest", "run", "--locked", "--target", target, "-j", "1"], cwd=output, env=env)
     receipt = {"source": json.loads((repo / "providers/screen-source.lock.json").read_text()),
                "build": build_spec,
                "compiled_graph_sha256": hashlib.sha256((output / "compiled-graph.json").read_bytes()).hexdigest(),
