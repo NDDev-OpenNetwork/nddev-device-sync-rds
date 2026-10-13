@@ -39,6 +39,7 @@ def main():
     sources.add_argument("--public-commit")
     parser.add_argument("--archive-sha256", required=True)
     parser.add_argument("--provider-archive", type=Path, help="optional published source input, verified against the native source lock")
+    parser.add_argument("--consumer-lock", type=Path, help="separate reviewed downstream lock; required for locked public-Git qualification")
     parser.add_argument("--resolve-lock", action="store_true", help="initial lock adoption; retain generated lock for review")
     args = parser.parse_args()
     repo = Path(__file__).resolve().parents[1]
@@ -47,6 +48,8 @@ def main():
         raise ValueError("output must be a new directory outside the source repository")
     if not re.fullmatch(r"[0-9a-f]{64}", args.archive_sha256):
         raise ValueError("an exact archive SHA-256 is required")
+    if args.public_commit and not args.consumer_lock and not args.resolve_lock:
+        raise ValueError("locked public-Git qualification requires an explicit downstream consumer lock")
     output.mkdir(mode=0o700, parents=True)
     archive = output / "nds-source.tar"
     if args.public_commit:
@@ -97,10 +100,15 @@ def main():
         manifest.append(f"{name}={{git={quote(native)},rev={quote(preparation['source']['source_commit'])},version=\"=0.1.0\",default-features=false,features={json.dumps(features)}}}")
     (consumer / "Cargo.toml").write_text("\n".join(manifest) + "\n")
     shutil.copyfile(source / "qualification/library.rs", consumer / "src/lib.rs")
-    lock = source / "qualification/library.Cargo.lock"
-    if lock.exists():
+    # A public SDK commit cannot contain a lock that references itself. The
+    # consumer owns its lock independently from the consumed SDK revision.
+    lock = args.consumer_lock.resolve() if args.consumer_lock else (source / "qualification/library.Cargo.lock" if not args.public_commit else None)
+    input_lock_sha256 = digest(lock) if lock and lock.is_file() else None
+    if args.consumer_lock and input_lock_sha256 is None:
+        raise ValueError("the explicit consumer lock is unavailable")
+    if input_lock_sha256:
         shutil.copyfile(lock, consumer / "Cargo.lock")
-    if not lock.exists() and not args.resolve_lock:
+    if input_lock_sha256 is None and not args.resolve_lock:
         raise ValueError("a reviewed consumer lock is required")
     cargo_home = output / "cargo-home"
     target_dir = output / "target"
@@ -114,7 +122,9 @@ def main():
         # Cargo external subcommands must receive --config themselves.
         return ["rustup", "run", "1.99.0", "cargo", arguments[0], "--config", str(config), *arguments[1:]]
     if args.resolve_lock:
-        run(cargo(["update", "-p", "nddev-device-sync-rds"] if lock.exists() else ["generate-lockfile"]), cwd=consumer, env=env)
+        # A path package is absent from the new Git package-ID namespace.
+        # Ordinary resolution retains the seed's other locked dependencies.
+        run(cargo(["fetch", "--target", TARGET] if input_lock_sha256 else ["generate-lockfile"]), cwd=consumer, env=env)
     locked_sha256 = digest(consumer / "Cargo.lock")
     run(cargo(["fetch", "--locked", "--target", TARGET]), cwd=consumer, env=env)
     metadata = json.loads(subprocess.check_output(cargo(["metadata", "--locked", "--offline", "--format-version", "1", "--filter-platform", TARGET]), cwd=consumer, env=env))
@@ -127,6 +137,14 @@ def main():
             raise ValueError(f"ambiguous/missing selected package: {name}")
         return matches[0]
 
+    sdk_package = packages[node_for("nddev-device-sync-rds")["id"]]
+    sdk_source = sdk_package["source"]
+    if args.public_commit:
+        expected = f"git+https://github.com/{REPOSITORY}?rev={args.public_commit}#{args.public_commit}"
+        if sdk_source != expected:
+            raise ValueError("the SDK was not consumed from the exact public Git revision")
+    elif Path(sdk_package["manifest_path"]) != source / "Cargo.toml":
+        raise ValueError("the SDK archive source was replaced")
     for name, features in bootstrap.LIBRARIES.items():
         node = node_for(name)
         package = packages[node["id"]]
@@ -162,6 +180,10 @@ def main():
         raise ValueError("unexpected GUI/portal/executable/audio package compiled")
     receipt = {"source_mode": "public_git" if args.public_commit else "local_archive",
                "public_commit": args.public_commit, "nds_archive_sha256": digest(archive),
+               "sdk_source": sdk_source,
+               "tooling_sha256": digest(Path(__file__)),
+               "input_consumer_lock_sha256": input_lock_sha256,
+               "lock_resolved": args.resolve_lock,
                "initial_cache": "new controlled Cargo home with only emitted config; empty registry/Git/build caches, no global cache copied",
                "provider": preparation, "target": TARGET,
                "source_graph_sha256": digest(output / "source-graph.json"),

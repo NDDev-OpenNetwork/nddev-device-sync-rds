@@ -69,6 +69,12 @@ gate. It requires a new output directory, starts with empty controlled Cargo and
 build caches, checks actual source paths/features, dependency policy/licenses and
 compiled artifacts. The source archive SHA is explicit. `--resolve-lock` is only
 for a reviewed initial lock adoption or a newly published NDS source pin; retain
-the resulting Cargo lock for review. Local archive evidence is distinct from the
+the resulting Cargo lock for review. Public Git mode uses an explicit
+`--consumer-lock PATH` owned by the downstream consumer, independently of the
+immutable SDK commit. After one reviewed resolve, repeat the same SDK pin in a
+new cache with that external lock and without `--resolve-lock`. The receipt
+records both the tooling hash and the exact consumed Git source; committing a
+lock that refers to its containing SDK commit would create a re-pin cycle.
+Local archive evidence is distinct from the
 public Git-consumer gate after source publication. Neither proves NDS endpoint
 authorization, host/credential activation or integrated Flutter screen runtime.
