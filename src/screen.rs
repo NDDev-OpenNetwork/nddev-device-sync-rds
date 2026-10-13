@@ -179,6 +179,7 @@ pub struct ScreenFrame {
     lease: ViewLease,
     deadline: Instant,
     live: Arc<AtomicBool>,
+    cancellation: CancellationToken,
     _retention: OwnedSemaphorePermit,
 }
 impl ScreenFrame {
@@ -187,6 +188,7 @@ impl ScreenFrame {
     }
     pub fn pixels(&self) -> Option<&[u8]> {
         (self.live.load(Ordering::Acquire)
+            && !self.cancellation.is_cancelled()
             && Instant::now() < self.deadline
             && now_ms().is_ok_and(|now| self.lease.remaining_ms(now).is_ok()))
         .then_some(self.raw.data.as_ref())
@@ -227,7 +229,7 @@ impl ScreenView {
                 biased;
                 _ = token.cancelled() => Err(ScreenError::Cancelled),
                 _ = tokio::time::sleep_until(deadline) => Err(ScreenError::Expired),
-                result = receive(desktop, frames_tx, alive.clone(), lease, deadline) => result,
+                result = receive(desktop, frames_tx, alive.clone(), token.clone(), lease, deadline) => result,
             };
             alive.store(false, Ordering::Release);
             status_tx.send_replace(Some(result.err().unwrap_or(ScreenError::Closed)));
@@ -247,6 +249,10 @@ impl ScreenView {
             }
             tokio::select! {
                 biased;
+                _ = self.cancellation.cancelled() => {
+                    self.live.store(false, Ordering::Release);
+                    return Err(ScreenError::Cancelled);
+                }
                 changed = self.status.changed() => { changed.map_err(|_| ScreenError::Closed)?; }
                 frame = self.frames.recv() => {
                     let frame = frame.ok_or(ScreenError::Closed)?;
@@ -280,6 +286,7 @@ async fn receive(
     mut desktop: ManagedDesktop,
     output: mpsc::Sender<ScreenFrame>,
     live: Arc<AtomicBool>,
+    cancellation: CancellationToken,
     lease: ViewLease,
     deadline: Instant,
 ) -> Result<(), ScreenError> {
@@ -332,6 +339,7 @@ async fn receive(
                         lease,
                         deadline,
                         live: live.clone(),
+                        cancellation: cancellation.clone(),
                         _retention: retention,
                     })
                     .await

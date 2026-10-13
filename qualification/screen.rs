@@ -204,6 +204,32 @@ async fn ended(view: &ScreenView) -> ScreenError {
     .expect("view lifetime did not terminate")
 }
 
+#[tokio::test]
+async fn cancelled_frames_are_inaccessible_before_the_worker_runs_again() {
+    let _marker = Marker::new();
+    let mut fixture = Fixture::new(Backend::Iroh).await;
+    let cancellation = CancellationToken::new();
+    let mut view = fixture
+        .adapter()
+        .open(
+            fixture.request(10_000, vec![ServiceKind::DesktopView]),
+            cancellation.clone(),
+        )
+        .await
+        .unwrap();
+    let frame = color(&mut view, true).await;
+    cancellation.cancel();
+    // This current-thread runtime cannot schedule the supervisor between these
+    // synchronous calls. Access must honor the cancellation token directly.
+    assert!(frame.pixels().is_none());
+    assert!(matches!(
+        view.next_frame().await,
+        Err(ScreenError::Cancelled)
+    ));
+    view.close().await;
+    fixture.close().await;
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn actual_x11_pixels_cross_managed_quic_and_cancel_under_retention_pressure() {
     let marker = Marker::new();
