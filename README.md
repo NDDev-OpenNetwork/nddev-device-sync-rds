@@ -37,3 +37,18 @@ claim Watching. The adapter uses shared core module errors/observations, rejects
 stale frame access and terminates when an owned source stops producing frames.
 Acceptance now owns its X server lifetime and can pause that exact server to
 exercise source loss without touching an ambient desktop.
+
+The native profile fits both the 1920-pixel width and 1080-pixel height bounds.
+Acceptance includes a real 5120×1440 source and an unchanged image lasting eight
+seconds, with the existing frame budget and native heartbeat.
+
+`scripts/check-browser.py --help` describes a separate Linux Chrome qualification:
+owned X11 capture, the existing encrypted Iroh/RDS protocol through an owned blind
+relay, WebCodecs H264 decoding, canvas rendering and actual compositor pixels.
+It checks cancellation, expiry, retained packets, one-use endpoint signatures and
+bounded binary/text WebSocket queues. The checked transport overlay caps its Rust
+receive queue at eight messages of at most 1 MiB; browser-owned buffers have their
+own lifetime. The loopback HTTP/WS fixture is not production HTTPS/WSS acceptance.
+Its ephemeral keys and fixture grants do not establish NDS device authorization
+or native trust. This code is a qualification input, not an exported NDS browser
+viewer. Other browsers, Wayland and other native platforms remain unqualified.
