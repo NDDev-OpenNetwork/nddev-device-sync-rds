@@ -1,0 +1,50 @@
+<!doctype html><meta charset="utf-8"><title>NDS isolated browser screen qualification</title>
+<canvas id="screen" width="640" height="480"></canvas>
+<script type="module">
+import init,{BrowserView,valid_frame_size,receiver_bounds_probe,render_wait_timeout_ms} from './pkg/nds_browser_screen_proof.js';
+await init();
+const canvas=document.querySelector('canvas'),ctx=canvas.getContext('2d',{willReadFrequently:true});
+let view,decoder,pending,loop;
+const stats={received:0,decoded:0,drawn:0,closed:0,sequence:null,error:null};
+function codec(data){for(let i=0;i+8<data.length;i++){let n=0;if(data[i]===0&&data[i+1]===0&&data[i+2]===1)n=i+3;else if(data[i]===0&&data[i+1]===0&&data[i+2]===0&&data[i+3]===1)n=i+4;if(n&&(data[n]&31)===7)return 'avc1.'+[data[n+1],data[n+2],data[n+3]].map(v=>v.toString(16).padStart(2,'0')).join('').toUpperCase();}throw Error('SPS unavailable');}
+async function bindingRequest(transport,cap,ttl_ms){
+const subject=transport.public_id(),headers={'content-type':'application/json',authorization:`Bearer ${cap}`};
+const response=await fetch('/binding-challenge',{method:'POST',headers,body:JSON.stringify({subject,ttl_ms})});if(!response.ok)throw Error('fixture challenge denied');
+const {challenge}=await response.json();return {subject,challenge,signature:Array.from(transport.endpoint_binding_proof(new Uint8Array(challenge)))};
+}
+async function fixtureGrant(transport,cap){
+const proof=await bindingRequest(transport,cap);
+const response=await fetch('/grant',{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${cap}`},body:JSON.stringify(proof)});if(!response.ok)throw Error('fixture grant denied');return response.json();
+}
+window.binding_proof_failures=async({cap,relay})=>{
+const transport=await BrowserView.create(relay),other=await BrowserView.create(relay);
+const submit=proof=>fetch('/grant',{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${cap}`},body:JSON.stringify(proof)}).then(response=>response.status);
+try{
+let invalid;try{transport.endpoint_binding_proof(new Uint8Array(64));}catch(error){invalid=String(error);}
+const expiredProof=await bindingRequest(transport,cap,100);await new Promise(resolve=>setTimeout(resolve,150));const expired=await submit(expiredProof);
+const proof=await bindingRequest(transport,cap),altered=structuredClone(proof);altered.challenge[30]^=1;
+const changed=await submit(altered);
+const wrongKey=await submit({...proof,signature:Array.from(other.endpoint_binding_proof(new Uint8Array(proof.challenge)))});
+const wrongSubject=await submit({...proof,subject:other.public_id()});
+const valid=await submit(proof),replay=await submit(proof);
+await transport.close();let closed;try{transport.endpoint_binding_proof(new Uint8Array(proof.challenge));}catch(error){closed=String(error);}
+return {invalid,expired,changed,wrongKey,wrongSubject,valid,replay,closed};
+}finally{await transport.close();await other.close();transport.free();other.free();}
+};
+window.start=async({cap,relay,lifetime=20000})=>{
+view=await BrowserView.create(relay);
+const native=await fixtureGrant(view,cap);
+await view.open(native.peer,relay,native.grant,new Uint8Array(native.issuer),lifetime);
+decoder=new VideoDecoder({output(frame){try{stats.decoded++;if(!view.is_current()){pending?.reject(Error('cancelled'));return;}if(!valid_frame_size(frame.displayWidth,frame.displayHeight,frame.displayWidth*4,frame.displayWidth*frame.displayHeight*4))throw Error('frame_limit');ctx.drawImage(frame,0,0);stats.drawn++;stats.sequence=frame.timestamp/33333;pending?.resolve();}catch(e){pending?.reject(e);}finally{frame.close();stats.closed++;pending=null;}},error(e){stats.error=String(e);pending?.reject(e);pending=null;}});
+window.view=view;
+loop=(async()=>{try{let configured=false;while(view.is_current()){
+const packet=await view.next_packet();try{const seq=Number(packet.sequence()),key=packet.keyframe(),data=packet.take_payload();stats.received++;
+if(!configured){const config={codec:codec(data),codedWidth:packet.width(),codedHeight:packet.height(),optimizeForLatency:true};const supported=await VideoDecoder.isConfigSupported(config);if(!supported.supported)throw Error('codec_unsupported');decoder.configure(config);configured=true;}
+await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('decode_timeout')),render_wait_timeout_ms());pending={resolve:()=>{clearTimeout(timer);resolve();},reject:error=>{clearTimeout(timer);reject(error);}};try{decoder.decode(new EncodedVideoChunk({type:key?'key':'delta',timestamp:seq*33333,data}));}catch(error){pending.reject(error);pending=null;}});}finally{packet.free();}
+}}catch(e){stats.error=String(e);}finally{await view.close();if(decoder.state!=='closed')decoder.close();ctx.clearRect(0,0,640,480);}})();
+return {subject:view.public_id(),secureContext:isSecureContext};};
+window.raw_transport=async({cap,relay,lifetime=10000})=>{const transport=await BrowserView.create(relay);const native=await fixtureGrant(transport,cap);await transport.open(native.peer,relay,native.grant,new Uint8Array(native.issuer),lifetime);return transport;};
+window.stats=()=>({...stats});window.valid_frame_size=valid_frame_size;
+window.stop=async()=>{await view.close();if(decoder?.state!=='closed')decoder.close();pending?.reject(Error('cancelled'));pending=null;await loop;view.free();ctx.clearRect(0,0,640,480);};
+window.receiver_bounds_probe=receiver_bounds_probe;window.ready=true;
+</script>

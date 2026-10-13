@@ -1,0 +1,12 @@
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -43,7 +43,8 @@
+ path = "examples/rtnetlink.rs"
+ 
+ [dependencies.paste]
+-version = "1"
++version = "=0.2.3"
++package = "pastey"
+ 
+ [dev-dependencies.netlink-packet-route]
+ version = "0.13.0"
