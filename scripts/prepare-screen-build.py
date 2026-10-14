@@ -31,7 +31,7 @@ def derive(original, destination, transform, expected_manifest, changed_file="Ca
     if not destination.exists():
         shutil.copytree(original, destination, symlinks=True)
         manifest = destination / changed_file
-        manifest.write_text(transform(manifest.read_text()))
+        manifest.write_text(transform(manifest.read_text(encoding="utf-8")), encoding="utf-8", newline="\n")
     originals, derived = files(original), files(destination)
     require(originals.keys() == derived.keys(), "derived build has extra or missing source files")
     for relative, source in originals.items():
