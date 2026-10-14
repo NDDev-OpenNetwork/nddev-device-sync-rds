@@ -3,7 +3,7 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 check:
     cargo fmt -- --check
     rustfmt --edition 2024 --check src/screen.rs qualification/screen.rs qualification/browser/transport.rs qualification/browser/fixture.rs qualification/browser/receiver_probe.rs
-    rustfmt --edition 2024 --check qualification/library.rs
+    rustfmt --edition 2024 --check qualification/library.rs qualification/owned-library.rs
     cargo clippy --locked --all-targets -- -D warnings
     cargo test --locked
 

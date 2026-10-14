@@ -78,3 +78,31 @@ lock that refers to its containing SDK commit would create a re-pin cycle.
 Local archive evidence is distinct from the
 public Git-consumer gate after source publication. Neither proves NDS endpoint
 authorization, host/credential activation or integrated Flutter screen runtime.
+
+The opt-in `owned-screen` feature exports the Linux owned receiver primitives.
+It uses the exact checked provider inputs from `prepare-library-provider.py`;
+supply the emitted consumer-root config to all Cargo commands, including default
+checks after adopting the feature dependency lock. Accounts and the existing
+NdsClient keep authority, the purpose owner, and presentation. The native receiver
+carries a conservative local exposed-queue/processing/residency bound through
+raw receive, unchanged native decode and two retained frame permits. It does not
+calculate network/capture age from a producer clock. A ready queued first stream
+can exhaust the three-second bound inside the nominal five-second startup.
+Normal unchanged idle uses the existing heartbeat and IDR refresh.
+
+The separate `owned-screen-linux` CI gate runs the receiver subsystem on its own
+Xvfb, generated native keys and passive Core projection. The fixture test is
+ignored unless explicitly invoked under that owned display. It does not claim
+Accounts-authenticated product viewing, a shared Flutter caller, or runtime on
+other platforms. The runtime manifest retains the existing manager capabilities.
+
+For the exported SDK API, add `--owned-screen` to `check-library.py`. This profile
+puts `features=["owned-screen"]` on the downstream SDK dependency and compiles
+`qualification/owned-library.rs` against canonical Core752 types. Fetch/lock
+adoption uses that same declared dependency profile; metadata, lint, build and
+any test commands also select its consumer feature. The gate checks the SDK
+feature node and exact public Git/Core/native sources. It retains the same
+consumer-root config for external tools and rejects lock changes. The default
+native-input/default-SDK gate remains distinct. After publishing the atomic SDK
+commit, adopt a separate owned-profile consumer lock once, then repeat that
+exact public Git revision in a new cache with the reviewed lock.
