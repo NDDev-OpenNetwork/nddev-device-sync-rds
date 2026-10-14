@@ -22,8 +22,17 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
           persist-credentials: false
+      - name: Configure checked Cargo environment
+        shell: bash
+        env:
+          CARGO_HOME: ${{ runner.temp }}/rds-cargo-home
+        run: printf '%s\n' "CARGO_HOME=$CARGO_HOME" >> "$GITHUB_ENV"
       - name: Install pinned Rust
         run: rustup toolchain install 1.99.0 --profile minimal --component rustfmt,clippy
+      - name: Prepare checked library metadata inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/prepare-library-provider.py --destination "${{ runner.temp }}/rds-provider" --config "${{ runner.temp }}/rds-cargo-home/config.toml"
       - name: Format
         run: cargo fmt --all -- --check
       - name: Lint
@@ -48,3 +57,33 @@ jobs:
       - name: Real isolated native provider acceptance
         if: runner.os == 'Linux'
         run: cargo test --locked --test provider -- --ignored
+
+  owned-screen-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Configure checked Cargo environment
+        shell: bash
+        env:
+          CARGO_HOME: ${{ runner.temp }}/rds-owned-cargo-home
+          NDS_RECEIVER_RESULTS: ${{ runner.temp }}/rds-owned-receiver-results.json
+        run: printf '%s\n' "CARGO_HOME=$CARGO_HOME" "NDS_RECEIVER_RESULTS=$NDS_RECEIVER_RESULTS" >> "$GITHUB_ENV"
+      - name: Install pinned Rust
+        run: rustup toolchain install 1.99.0 --profile minimal --component rustfmt,clippy
+      - name: Install Linux build and owned display inputs
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends libclang-dev pkg-config libssl-dev libx11-dev nasm xvfb xauth x11-utils
+      - name: Prepare checked library inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/prepare-library-provider.py --destination "$RUNNER_TEMP/rds-owned-provider" --config "$RUNNER_TEMP/rds-owned-cargo-home/config.toml"
+      - name: Lint owned-screen feature
+        run: cargo clippy --locked --features owned-screen --all-targets -- -D warnings
+      - name: Typed boundary tests
+        run: cargo test --locked --features owned-screen --lib
+      - name: Actual native receiver subsystem
+        run: python3 scripts/owned-x11.py -- cargo test --locked --features owned-screen --lib actual_receiver_age_pause_idle_pressure_and_expiry -- --ignored --nocapture

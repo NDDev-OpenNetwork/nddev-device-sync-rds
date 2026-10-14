@@ -3,7 +3,8 @@
 
 An explicit source archive covers an unpublished NDS source tree. The public
 commit mode also consumes NDS as a Git dependency after protected publication.
-Neither mode activates an endpoint, native host or NDS screen feature.
+Neither mode activates an endpoint, native host or product viewer. The explicit
+owned-screen profile compiles the exported SDK API; default remains separate.
 """
 import argparse
 import hashlib
@@ -16,6 +17,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import tomllib
 import urllib.request
 
 
@@ -40,6 +42,7 @@ def main():
     parser.add_argument("--archive-sha256", required=True)
     parser.add_argument("--provider-archive", type=Path, help="optional published source input, verified against the native source lock")
     parser.add_argument("--consumer-lock", type=Path, help="separate reviewed downstream lock; required for locked public-Git qualification")
+    parser.add_argument("--owned-screen", action="store_true", help="qualify the exported Linux owned-screen SDK API; default remains the separate native-input/default-SDK gate")
     parser.add_argument("--resolve-lock", action="store_true", help="initial lock adoption; retain generated lock for review")
     args = parser.parse_args()
     repo = Path(__file__).resolve().parents[1]
@@ -92,17 +95,39 @@ def main():
     (consumer / "src").mkdir(parents=True)
     quote = lambda value: json.dumps(str(value))
     sdk = f"git={quote('https://github.com/' + REPOSITORY)},rev={quote(args.public_commit)}" if args.public_commit else f"path={quote(source)}"
+    sdk_manifest = tomllib.loads((source / "Cargo.toml").read_text())
+    sdk_version = sdk_manifest["package"]["version"]
+    sdk_features = ["owned-screen"] if args.owned_screen else []
+    # Fetch/lock adoption uses this same unconditional SDK dependency feature;
+    # Cargo fetch itself has no --features option.
+    libraries = {name: features for name, features in bootstrap.LIBRARIES.items()
+                 if not args.owned_screen or name != "rds-agent"}
     manifest = ["[package]", 'name="nds-rds-library-consumer"', 'version="0.0.0"',
-                'edition="2024"', 'license="AGPL-3.0-only"', "[dependencies]",
-                f"nddev-device-sync-rds={{{sdk},version=\"=0.0.1-alpha.1\"}}"]
+                'edition="2024"', 'license="AGPL-3.0-only"']
+    if args.owned_screen:
+        manifest.extend(["[features]", 'owned-screen=["nddev-device-sync-rds/owned-screen"]'])
+    manifest.extend(["[dependencies]",
+                     f"nddev-device-sync-rds={{{sdk},version=\"={sdk_version}\",features={json.dumps(sdk_features)}}}"])
+    if args.owned_screen:
+        core_dependencies = sdk_manifest["target"]['cfg(target_os = "linux")']["dependencies"]
+        for name, version in [("nddev-device-sync-domain", "=0.0.12"),
+                              ("nddev-device-sync-application", "=0.0.1-alpha.21")]:
+            dep = core_dependencies[name]
+            if (dep["git"] != "https://github.com/NDDev-OpenNetwork/nddev-device-sync-core.git"
+                    or dep["rev"] != "75250e0e7297c214e36d057987ef328ea5543a4b"
+                    or dep["version"] != version):
+                raise ValueError("owned API witness requires coordinated canonical Core752 inputs")
+            manifest.append(name + "={version=" + quote(version) + ",git=" + quote(dep["git"]) + ",rev=" + quote(dep["rev"]) + "}")
+        manifest.append('tokio-util={version="0.7",features=["rt"]}')
     native = "https://github.com/" + preparation["source"]["repository"]
-    for name, features in bootstrap.LIBRARIES.items():
+    for name, features in libraries.items():
         manifest.append(f"{name}={{git={quote(native)},rev={quote(preparation['source']['source_commit'])},version=\"=0.1.0\",default-features=false,features={json.dumps(features)}}}")
     (consumer / "Cargo.toml").write_text("\n".join(manifest) + "\n")
-    shutil.copyfile(source / "qualification/library.rs", consumer / "src/lib.rs")
+    witness = source / ("qualification/owned-library.rs" if args.owned_screen else "qualification/library.rs")
+    shutil.copyfile(witness, consumer / "src/lib.rs")
     # A public SDK commit cannot contain a lock that references itself. The
     # consumer owns its lock independently from the consumed SDK revision.
-    lock = args.consumer_lock.resolve() if args.consumer_lock else (source / "qualification/library.Cargo.lock" if not args.public_commit else None)
+    lock = args.consumer_lock.resolve() if args.consumer_lock else (source / ("Cargo.lock" if args.owned_screen else "qualification/library.Cargo.lock") if not args.public_commit else None)
     input_lock_sha256 = digest(lock) if lock and lock.is_file() else None
     if args.consumer_lock and input_lock_sha256 is None:
         raise ValueError("the explicit consumer lock is unavailable")
@@ -120,7 +145,8 @@ def main():
         env.pop(name, None)
     def cargo(arguments):
         # Cargo external subcommands must receive --config themselves.
-        return ["rustup", "run", "1.99.0", "cargo", arguments[0], "--config", str(config), *arguments[1:]]
+        selected = ["--features", "owned-screen"] if args.owned_screen and arguments[0] in {"metadata", "clippy", "build", "check", "test"} else []
+        return ["rustup", "run", "1.99.0", "cargo", arguments[0], "--config", str(config), *selected, *arguments[1:]]
     if args.resolve_lock:
         # A path package is absent from the new Git package-ID namespace.
         # Ordinary resolution retains the seed's other locked dependencies.
@@ -137,7 +163,16 @@ def main():
             raise ValueError(f"ambiguous/missing selected package: {name}")
         return matches[0]
 
-    sdk_package = packages[node_for("nddev-device-sync-rds")["id"]]
+    sdk_node = node_for("nddev-device-sync-rds")
+    if set(sdk_node["features"]) - {"default"} != set(sdk_features):
+        raise ValueError("the SDK does not have the selected qualification feature")
+    sdk_package = packages[sdk_node["id"]]
+    if args.owned_screen:
+        for name, version in [("nddev-device-sync-domain", "0.0.12"),
+                              ("nddev-device-sync-application", "0.0.1-alpha.21")]:
+            package = packages[node_for(name, version)["id"]]
+            if package["source"] != "git+https://github.com/NDDev-OpenNetwork/nddev-device-sync-core.git?rev=75250e0e7297c214e36d057987ef328ea5543a4b#75250e0e7297c214e36d057987ef328ea5543a4b":
+                raise ValueError("owned API witness lost canonical Core source identity")
     sdk_source = sdk_package["source"]
     if args.public_commit:
         expected = f"git+https://github.com/{REPOSITORY}?rev={args.public_commit}#{args.public_commit}"
@@ -145,7 +180,7 @@ def main():
             raise ValueError("the SDK was not consumed from the exact public Git revision")
     elif Path(sdk_package["manifest_path"]) != source / "Cargo.toml":
         raise ValueError("the SDK archive source was replaced")
-    for name, features in bootstrap.LIBRARIES.items():
+    for name, features in libraries.items():
         node = node_for(name)
         package = packages[node["id"]]
         effective = set(node["features"]) - {"default"}
@@ -181,6 +216,10 @@ def main():
     receipt = {"source_mode": "public_git" if args.public_commit else "local_archive",
                "public_commit": args.public_commit, "nds_archive_sha256": digest(archive),
                "sdk_source": sdk_source,
+               "sdk_features": sdk_features,
+               "qualification_profile": "owned-screen-api" if args.owned_screen else "native-inputs-default-sdk",
+               "api_witness_sha256": digest(witness),
+               "selected_native_libraries": libraries,
                "tooling_sha256": digest(Path(__file__)),
                "input_consumer_lock_sha256": input_lock_sha256,
                "lock_resolved": args.resolve_lock,
