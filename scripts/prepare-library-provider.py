@@ -45,10 +45,10 @@ def prepare(destination, config, archive=None):
         lines.append(f"{name} = {{path={quote(destination / 'build/engine/vendor' / name)}}}")
     lines.append(f"netlink-packet-core = {{path={quote(destination / 'build/netlink-packet-core')}}}")
     contents = "\n".join(lines) + "\n"
-    if config.exists() and config.read_text() != contents:
+    if config.exists() and config.read_text(encoding="utf-8") != contents:
         raise ValueError("refusing to overwrite a different consumer Cargo config")
     config.parent.mkdir(parents=True, exist_ok=True)
-    config.write_text(contents)
+    config.write_text(contents, encoding="utf-8", newline="\n")
     receipt = {
         "source": source,
         "target": "x86_64-unknown-linux-gnu",
