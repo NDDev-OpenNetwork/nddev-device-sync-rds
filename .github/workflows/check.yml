@@ -30,6 +30,8 @@ jobs:
       - name: Install pinned Rust
         run: rustup toolchain install 1.99.0 --profile minimal --component rustfmt,clippy
       - name: Prepare checked library metadata inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: python scripts/prepare-library-provider.py --destination "${{ runner.temp }}/rds-provider" --config "${{ runner.temp }}/rds-cargo-home/config.toml"
       - name: Format
         run: cargo fmt --all -- --check
@@ -76,6 +78,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install --no-install-recommends libclang-dev pkg-config libssl-dev libx11-dev nasm xvfb xauth x11-utils
       - name: Prepare checked library inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: python3 scripts/prepare-library-provider.py --destination "$RUNNER_TEMP/rds-owned-provider" --config "$RUNNER_TEMP/rds-owned-cargo-home/config.toml"
       - name: Lint owned-screen feature
         run: cargo clippy --locked --features owned-screen --all-targets -- -D warnings
