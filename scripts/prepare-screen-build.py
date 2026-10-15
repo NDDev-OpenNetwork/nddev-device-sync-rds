@@ -99,7 +99,9 @@ def prepare(root):
     def versions(contents):
         changed, count = re.subn(r'(rds-[a-z-]+\s*=\s*\{\s*path\s*=\s*"crates/rds-[a-z-]+")\s*\}', r'\1, version = "=0.1.0" }', contents)
         require(count == workspace["entries"], "workspace path dependency drift")
-        return changed
+        # Selected native callers use alloc/std APIs; heapless CAS is unused.
+        require(changed.count('postcard = "1"') == 1, "workspace postcard dependency drift")
+        return changed.replace('postcard = "1"', 'postcard = { version = "1", default-features = false }')
 
     build = root / "build"
     build.mkdir(mode=0o700, exist_ok=True)

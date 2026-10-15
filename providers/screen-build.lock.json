@@ -5,9 +5,9 @@
   "target": "x86_64-unknown-linux-gnu",
   "workspace": {
     "before_sha256": "da2e019dbae7454492ed154863c5a687ffb978990ab3280d784a722bc8dec179",
-    "after_sha256": "9331538eae408916161db7797becc714e9f1c26147911177edc86d2667e0ead1",
+    "after_sha256": "b87df382a8883221e53042e2e2fdb261c04f0f55f12d1d1bd1409abccfcfdfa5",
     "patch": "providers/build-patches/workspace-versions.patch",
-    "patch_sha256": "6ae8167c9f02ef06cad29dba0cfcad5408eaa26e2d92ada377d1ee7ec88ee28d",
+    "patch_sha256": "598371293823111d1aa36ce96858ca294cd995dece1c3cdb2b040dd0ebf0a445",
     "entries": 13
   },
   "netlink": {
