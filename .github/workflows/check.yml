@@ -19,7 +19,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
       - name: Configure checked Cargo environment
@@ -28,7 +28,7 @@ jobs:
           CARGO_HOME: ${{ runner.temp }}/rds-cargo-home
         run: printf '%s\n' "CARGO_HOME=$CARGO_HOME" >> "$GITHUB_ENV"
       - name: Install pinned Rust
-        run: rustup toolchain install 1.99.0 --profile minimal --component rustfmt,clippy
+        run: rustup toolchain install 1.99.1 --profile minimal --component rustfmt,clippy
       - name: Prepare checked library metadata inputs
         env:
           GH_TOKEN: ${{ github.token }}
@@ -62,7 +62,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
       - name: Configure checked Cargo environment
@@ -72,7 +72,7 @@ jobs:
           NDS_RECEIVER_RESULTS: ${{ runner.temp }}/rds-owned-receiver-results.json
         run: printf '%s\n' "CARGO_HOME=$CARGO_HOME" "NDS_RECEIVER_RESULTS=$NDS_RECEIVER_RESULTS" >> "$GITHUB_ENV"
       - name: Install pinned Rust
-        run: rustup toolchain install 1.99.0 --profile minimal --component rustfmt,clippy
+        run: rustup toolchain install 1.99.1 --profile minimal --component rustfmt,clippy
       - name: Install Linux build and owned display inputs
         run: |
           sudo apt-get update
