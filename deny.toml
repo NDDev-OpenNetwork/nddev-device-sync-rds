@@ -14,11 +14,12 @@ version = "=0.2.0"
 allow = ["Zlib"]
 [[licenses.exceptions]]
 name = "openh264"
-version = "=0.9.8"
+# Retain the reviewed compatibility fixtures alongside the current codec.
+version = ">=0.9.8, <=0.9.9"
 allow = ["BSD-2-Clause"]
 [[licenses.exceptions]]
 name = "openh264-sys2"
-version = "=0.9.8"
+version = ">=0.9.8, <=0.9.9"
 allow = ["BSD-2-Clause"]
 [[licenses.exceptions]]
 name = "spez"
@@ -26,6 +27,10 @@ version = "=0.1.2"
 allow = ["BSD-2-Clause"]
 [[licenses.exceptions]]
 name = "webpki-roots"
+version = "=1.0.9"
+allow = ["CDLA-Permissive-2.0"]
+[[licenses.exceptions]]
+name = "webpki-root-certs"
 version = "=1.0.9"
 allow = ["CDLA-Permissive-2.0"]
 # Browser relay implementation only; exact published artifacts were reviewed.

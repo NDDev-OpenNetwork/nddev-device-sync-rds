@@ -44,7 +44,7 @@ jobs:
         run: |
           cargo install --locked --version 0.20.2 cargo-deny
           cargo install --locked --version 0.22.2 cargo-audit
-          cargo deny check
+          cargo deny --locked --all-features check
           cargo audit --deny warnings
       - name: Fetch verified native provider
         if: runner.os == 'Linux'
