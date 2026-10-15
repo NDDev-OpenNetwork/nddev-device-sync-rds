@@ -1,4 +1,4 @@
-//! Compile the exported owned API against canonical Core752. No I/O is invoked.
+//! Compile the exported owned API against canonical Core. No I/O is invoked.
 use nddev_device_sync_application::screen::HostAccess;
 use nddev_device_sync_domain::{
     DeviceId,
