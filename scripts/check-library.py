@@ -91,6 +91,7 @@ def main():
     # this isolated Cargo home so they cannot silently resolve another graph.
     config = output / "cargo-home/config.toml"
     preparation = bootstrap.prepare(provider, config, args.provider_archive)
+    toolchain = tomllib.loads((source / "rust-toolchain.toml").read_text())["toolchain"]["channel"]
     consumer = output / "consumer"
     (consumer / "src").mkdir(parents=True)
     quote = lambda value: json.dumps(str(value))
@@ -113,8 +114,8 @@ def main():
         for name, version in [("nddev-device-sync-domain", "=0.0.12"),
                               ("nddev-device-sync-application", "=0.0.1-alpha.21")]:
             dep = core_dependencies[name]
-            if (dep["git"] != "https://github.com/NDDev-OpenNetwork/nddev-device-sync-core.git"
-                    or dep["rev"] != "19ceef8a233b68ace3b18ebeb852633ed26d208c"
+            if (dep["git"] != "https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-core.git"
+                    or dep["rev"] != "889f0f4a9b6416e92eaaac111471a9d700ef8468"
                     or dep["version"] != version):
                 raise ValueError("owned API witness requires coordinated canonical Core inputs")
             manifest.append(name + "={version=" + quote(version) + ",git=" + quote(dep["git"]) + ",rev=" + quote(dep["rev"]) + "}")
@@ -146,7 +147,7 @@ def main():
     def cargo(arguments):
         # Cargo external subcommands must receive --config themselves.
         selected = ["--features", "owned-screen"] if args.owned_screen and arguments[0] in {"metadata", "clippy", "build", "check", "test"} else []
-        return ["rustup", "run", "1.99.0", "cargo", arguments[0], "--config", str(config), *selected, *arguments[1:]]
+        return ["rustup", "run", toolchain, "cargo", arguments[0], "--config", str(config), *selected, *arguments[1:]]
     if args.resolve_lock:
         # A path package is absent from the new Git package-ID namespace.
         # Ordinary resolution retains the seed's other locked dependencies.
@@ -171,7 +172,7 @@ def main():
         for name, version in [("nddev-device-sync-domain", "0.0.12"),
                               ("nddev-device-sync-application", "0.0.1-alpha.21")]:
             package = packages[node_for(name, version)["id"]]
-            if package["source"] != "git+https://github.com/NDDev-OpenNetwork/nddev-device-sync-core.git?rev=19ceef8a233b68ace3b18ebeb852633ed26d208c#19ceef8a233b68ace3b18ebeb852633ed26d208c":
+            if package["source"] != "git+https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-core.git?rev=889f0f4a9b6416e92eaaac111471a9d700ef8468#889f0f4a9b6416e92eaaac111471a9d700ef8468":
                 raise ValueError("owned API witness lost canonical Core source identity")
     sdk_source = sdk_package["source"]
     if args.public_commit:
@@ -228,7 +229,7 @@ def main():
                "source_graph_sha256": digest(output / "source-graph.json"),
                "compiled_features_sha256": digest(output / "compiled-features.json"),
                "consumer_lock_sha256": digest(consumer / "Cargo.lock"),
-               "rustc": subprocess.check_output(["rustup", "run", "1.99.0", "rustc", "-vV"], env=env, text=True),
+               "rustc": subprocess.check_output(["rustup", "run", toolchain, "rustc", "-vV"], env=env, text=True),
                "native_compiler": subprocess.check_output(["cc", "--version"], env=env, text=True).splitlines()[0],
                "scope": "downstream source/library/feature/license/build gate only; no identity/store/endpoint/host/Flutter runtime activation"}
     (output / "library-qualification.json").write_text(json.dumps(receipt, indent=2) + "\n")

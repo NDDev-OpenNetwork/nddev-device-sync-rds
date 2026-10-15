@@ -25,6 +25,7 @@ def main():
     parser.add_argument("--browser", type=Path, required=True)
     args = parser.parse_args()
     repo = Path(__file__).resolve().parents[1]
+    toolchain = tomllib.loads((repo / "rust-toolchain.toml").read_text())["toolchain"]["channel"]
     output = args.output.resolve()
     if output.is_relative_to(repo):
         raise ValueError("browser evidence must stay outside the repository")
@@ -71,7 +72,7 @@ def main():
     (fixture / "src/main.rs").write_text(f'include!({quote(repo / "qualification/browser/fixture.rs")});\n')
     for project, filename in [(client, "client.Cargo.lock"), (fixture, "fixture.Cargo.lock")]:
         shutil.copyfile(repo / "qualification/browser" / filename, project / "Cargo.lock")
-    env = dict(os.environ, RUSTUP_TOOLCHAIN="1.99.0")
+    env = dict(os.environ, RUSTUP_TOOLCHAIN=toolchain)
     client_env = dict(env, CARGO_TARGET_DIR=str(output / "wasm-target"))
     native_env = dict(env, CARGO_TARGET_DIR=str(output / "native-target"))
     if os.environ.get("NDS_BROWSER_WASM_TARGET"):
@@ -79,12 +80,12 @@ def main():
     if os.environ.get("NDS_BROWSER_NATIVE_TARGET"):
         native_env["CARGO_TARGET_DIR"] = os.environ["NDS_BROWSER_NATIVE_TARGET"]
     for project, target, build_env in [(client, "wasm32-unknown-unknown", client_env), (fixture, "x86_64-unknown-linux-gnu", native_env)]:
-        metadata = subprocess.check_output(["rustup", "run", "1.99.0", "cargo", "metadata", "--manifest-path", str(project / "Cargo.toml"), "--locked", "--format-version", "1", "--filter-platform", target], env=build_env)
+        metadata = subprocess.check_output(["rustup", "run", toolchain, "cargo", "metadata", "--manifest-path", str(project / "Cargo.toml"), "--locked", "--format-version", "1", "--filter-platform", target], env=build_env)
         (project / "compiled-graph.json").write_bytes(metadata)
         run(["cargo", "deny", "--manifest-path", str(project / "Cargo.toml"), "--config", str(repo / "deny.toml"), "--target", target, "check"], env=build_env)
         run(["cargo", "audit", "--deny", "warnings", "--file", str(project / "Cargo.lock")], env=build_env)
-        run(["rustup", "run", "1.99.0", "cargo", "clippy", "--manifest-path", str(project / "Cargo.toml"), "--locked", "--target", target, "--", "-D", "warnings"], env=build_env)
-        compiled = subprocess.run(["rustup", "run", "1.99.0", "cargo", "build", "--manifest-path", str(project / "Cargo.toml"), "--locked", "--target", target, "--message-format=json", "-j", "4"], env=build_env, text=True, stdout=subprocess.PIPE)
+        run(["rustup", "run", toolchain, "cargo", "clippy", "--manifest-path", str(project / "Cargo.toml"), "--locked", "--target", target, "--", "-D", "warnings"], env=build_env)
+        compiled = subprocess.run(["rustup", "run", toolchain, "cargo", "build", "--manifest-path", str(project / "Cargo.toml"), "--locked", "--target", target, "--message-format=json", "-j", "4"], env=build_env, text=True, stdout=subprocess.PIPE)
         (project / "build.jsonl").write_text(compiled.stdout)
         records = [json.loads(line) for line in compiled.stdout.splitlines() if line.startswith("{")]
         if compiled.returncode:
@@ -112,7 +113,7 @@ def main():
     digest = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
     receipt = {"source": json.loads((repo / "providers/screen-source.lock.json").read_text()),
                "browser_overlay": json.loads((repo / "providers/browser-transport.lock.json").read_text()),
-               "toolchain": "1.99.0", "transport": "Iroh WASM endpoint via own relay, existing rds/0 and peer-authenticated encrypted channel", "server_media_decryption": False,
+               "toolchain": toolchain, "transport": "Iroh WASM endpoint via own relay, existing rds/0 and peer-authenticated encrypted channel", "server_media_decryption": False,
                "outer_relay": "isolated loopback HTTP/WS fixture; production HTTPS/WSS unqualified",
                "proof": "real transport endpoint signature and one-use fixture challenge; NDS device proof/store integration unqualified",
                "pixels": pixels, "browser": json.loads((output / "browser-results.json").read_text())["browser"],

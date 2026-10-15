@@ -12,7 +12,7 @@ repository = "https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-
 serde = { version = "1", features = ["derive"] }
 
 [target.'cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))'.dependencies]
-nddev-device-sync-adapter-io = { version = "=0.0.1-alpha.1", git = "https://github.com/NDDev-OpenNetwork/nddev-device-sync-agent", rev = "341644980976a08825b194f147b7534321325785" }
+nddev-device-sync-adapter-io = { version = "=0.0.1-alpha.4", git = "https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-agent", rev = "fba131111837ce1fe6c82ce6df9e3d19420f62e7" }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
@@ -27,8 +27,8 @@ unsafe_code = "forbid"
 owned-screen = ["dep:nddev-device-sync-domain", "dep:nddev-device-sync-application", "dep:rds-core", "dep:rds-net", "dep:rds-client", "dep:rds-desktop", "dep:anyhow", "dep:postcard", "dep:rand", "dep:iroh", "dep:tokio", "dep:tokio-util"]
 
 [target.'cfg(target_os = "linux")'.dependencies]
-nddev-device-sync-domain = { version = "=0.0.12", git = "https://github.com/NDDev-OpenNetwork/nddev-device-sync-core.git", rev = "19ceef8a233b68ace3b18ebeb852633ed26d208c", optional = true }
-nddev-device-sync-application = { version = "=0.0.1-alpha.21", git = "https://github.com/NDDev-OpenNetwork/nddev-device-sync-core.git", rev = "19ceef8a233b68ace3b18ebeb852633ed26d208c", optional = true }
+nddev-device-sync-domain = { version = "=0.0.12", git = "https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-core.git", rev = "889f0f4a9b6416e92eaaac111471a9d700ef8468", optional = true }
+nddev-device-sync-application = { version = "=0.0.1-alpha.21", git = "https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-core.git", rev = "889f0f4a9b6416e92eaaac111471a9d700ef8468", optional = true }
 rds-core = { version = "=0.1.0", git = "https://github.com/NDDev-Technocracy-OpenNetwork/remote-device-sync", rev = "2761dbdb76baee0edc2557b02ac7a90472312ab7", default-features = false, optional = true }
 rds-net = { version = "=0.1.0", git = "https://github.com/NDDev-Technocracy-OpenNetwork/remote-device-sync", rev = "2761dbdb76baee0edc2557b02ac7a90472312ab7", default-features = false, optional = true }
 rds-client = { version = "=0.1.0", git = "https://github.com/NDDev-Technocracy-OpenNetwork/remote-device-sync", rev = "2761dbdb76baee0edc2557b02ac7a90472312ab7", default-features = false, optional = true }

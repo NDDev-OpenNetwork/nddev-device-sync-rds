@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "upstream_commit": "2761dbdb76baee0edc2557b02ac7a90472312ab7",
-  "toolchain": "1.99.0",
+  "toolchain": "1.99.1",
   "target": "x86_64-unknown-linux-gnu",
   "workspace": {
     "before_sha256": "da2e019dbae7454492ed154863c5a687ffb978990ab3280d784a722bc8dec179",
