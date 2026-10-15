@@ -38,6 +38,7 @@ def main():
     common = ["[package]", 'version="0.0.0"', 'edition="2024"', 'license="AGPL-3.0-only"', "[dependencies]",
               f'nddev-device-sync-domain={{package={quote(package["name"])},version={quote("=" + package["version"])},path={quote(domain)}}}']
     patches = ["[patch.crates-io]"] + [f'{name}={{path={quote(engine / "vendor" / name)}}}' for name in ["iroh", "noq", "noq-proto"]]
+    patches.append(f'netlink-packet-core={{path={quote(provider / "build/netlink-packet-core")}}}')
     client = output / "client"
     fixture = output / "fixture"
     for project in [client, fixture]:
@@ -49,7 +50,7 @@ def main():
                  f'rds-core={{version="=0.1.0",path={quote(engine / "crates/rds-core")}}}',
                  'wasm-bindgen="=0.2.129"', 'wasm-bindgen-futures="=0.4.79"', 'js-sys="=0.3.106"',
                  'tokio={version="1",default-features=false,features=["io-util","sync"]}',
-                 'postcard={version="1",features=["use-std"]}', 'serde={version="1",features=["derive"]}',
+                 'postcard={version="1",default-features=false,features=["use-std"]}', 'serde={version="1",features=["derive"]}',
                  'serde-wasm-bindgen="0.6"', 'n0-future="0.3"', 'futures-util="0.3"', 'rand="0.10"', 'ws_stream_wasm="=0.7.5"']
     manifest += patches + [f'ws_stream_wasm={{path={quote(provider / "build/ws_stream_wasm")}}}']
     (client / "Cargo.toml").write_text("\n".join(manifest) + "\n")
@@ -65,7 +66,7 @@ def main():
     manifest += ['tokio={version="1",features=["full"]}', 'tokio-util={version="0.7",features=["rt"]}',
                  'ed25519-dalek="3"', 'rand="0.10"', 'tempfile="3"', 'x11rb="0.14"',
                  'axum={version="0.8",features=["json","ws"]}', 'serde_json="1"', 'iroh-relay={version="=1.3.0",features=["server"]}']
-    manifest += patches + [f'netlink-packet-core={{path={quote(provider / "build/netlink-packet-core")}}}']
+    manifest += patches
     (fixture / "Cargo.toml").write_text("\n".join(manifest) + "\n")
     (fixture / "src/main.rs").write_text(f'include!({quote(repo / "qualification/browser/fixture.rs")});\n')
     for project, filename in [(client, "client.Cargo.lock"), (fixture, "fixture.Cargo.lock")]:
@@ -81,6 +82,7 @@ def main():
         metadata = subprocess.check_output(["rustup", "run", "1.99.0", "cargo", "metadata", "--manifest-path", str(project / "Cargo.toml"), "--locked", "--format-version", "1", "--filter-platform", target], env=build_env)
         (project / "compiled-graph.json").write_bytes(metadata)
         run(["cargo", "deny", "--manifest-path", str(project / "Cargo.toml"), "--config", str(repo / "deny.toml"), "--target", target, "check"], env=build_env)
+        run(["cargo", "audit", "--deny", "warnings", "--file", str(project / "Cargo.lock")], env=build_env)
         run(["rustup", "run", "1.99.0", "cargo", "clippy", "--manifest-path", str(project / "Cargo.toml"), "--locked", "--target", target, "--", "-D", "warnings"], env=build_env)
         compiled = subprocess.run(["rustup", "run", "1.99.0", "cargo", "build", "--manifest-path", str(project / "Cargo.toml"), "--locked", "--target", target, "--message-format=json", "-j", "4"], env=build_env, text=True, stdout=subprocess.PIPE)
         (project / "build.jsonl").write_text(compiled.stdout)

@@ -59,6 +59,9 @@ the checked source preparer and emits one consumer-root Cargo override file.
 An optional `--archive` accepts the exact published provider source archive.
 Generated inputs/config stay outside this repository. Consumers supply CONFIG
 to every top-level Cargo command; dependency-local patches are ignored by Cargo.
+Checked manifests disable unused Postcard heapless/CAS defaults while retaining
+the native alloc/std serialization APIs and wire types. Advisory gates reject
+maintenance warnings as well as known vulnerabilities.
 Use a dedicated Cargo home with this generated config for external Cargo tools
 as well; the gate rejects tools that silently alter its lockfile/source graph.
 Only `rds-agent/desktop` and `rds-desktop/x11` are selected; the provider GUI,
