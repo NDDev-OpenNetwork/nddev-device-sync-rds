@@ -114,9 +114,9 @@ def main():
                               ("nddev-device-sync-application", "=0.0.1-alpha.21")]:
             dep = core_dependencies[name]
             if (dep["git"] != "https://github.com/NDDev-OpenNetwork/nddev-device-sync-core.git"
-                    or dep["rev"] != "75250e0e7297c214e36d057987ef328ea5543a4b"
+                    or dep["rev"] != "19ceef8a233b68ace3b18ebeb852633ed26d208c"
                     or dep["version"] != version):
-                raise ValueError("owned API witness requires coordinated canonical Core752 inputs")
+                raise ValueError("owned API witness requires coordinated canonical Core inputs")
             manifest.append(name + "={version=" + quote(version) + ",git=" + quote(dep["git"]) + ",rev=" + quote(dep["rev"]) + "}")
         manifest.append('tokio-util={version="0.7",features=["rt"]}')
     native = "https://github.com/" + preparation["source"]["repository"]
@@ -171,7 +171,7 @@ def main():
         for name, version in [("nddev-device-sync-domain", "0.0.12"),
                               ("nddev-device-sync-application", "0.0.1-alpha.21")]:
             package = packages[node_for(name, version)["id"]]
-            if package["source"] != "git+https://github.com/NDDev-OpenNetwork/nddev-device-sync-core.git?rev=75250e0e7297c214e36d057987ef328ea5543a4b#75250e0e7297c214e36d057987ef328ea5543a4b":
+            if package["source"] != "git+https://github.com/NDDev-OpenNetwork/nddev-device-sync-core.git?rev=19ceef8a233b68ace3b18ebeb852633ed26d208c#19ceef8a233b68ace3b18ebeb852633ed26d208c":
                 raise ValueError("owned API witness lost canonical Core source identity")
     sdk_source = sdk_package["source"]
     if args.public_commit:
