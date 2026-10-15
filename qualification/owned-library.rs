@@ -1,4 +1,4 @@
-//! Compile the exported owned API against canonical Core752. No I/O is invoked.
+//! Compile the exported owned API against canonical Core. No I/O is invoked.
 use nddev_device_sync_application::screen::HostAccess;
 use nddev_device_sync_domain::{
     DeviceId,
@@ -54,6 +54,10 @@ pub fn frame_contract(ticket: &mut FrameTicket) -> Result<Vec<u8>, ScreenError> 
     ticket.read_once()
 }
 
-pub async fn close_contract(viewer: NativeViewer) -> Result<(), ScreenError> {
+pub async fn close_contract(viewer: &mut NativeViewer) -> Result<(), ScreenError> {
     viewer.close().await
+}
+
+pub fn drained_contract(viewer: &NativeViewer) -> bool {
+    viewer.is_drained()
 }

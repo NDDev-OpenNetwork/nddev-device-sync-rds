@@ -383,7 +383,8 @@ async fn receiver(
         // Pinned AcceptUni only consumes a stream on Ready; dropping Pending
         // at the idle timeout leaves the connection's queue untouched.
         let accepted = {
-            let mut accepting = std::pin::pin!(conn.accept_uni());
+            let accepting = conn.accept_uni();
+            tokio::pin!(accepting);
             tokio::time::timeout(
                 Duration::from_millis(250),
                 poll_fn(|cx| match accepting.as_mut().poll(cx) {
@@ -462,6 +463,7 @@ pub struct NativeViewer {
     life: Arc<Life>,
     frames: Arc<Frames>,
     tasks: Vec<JoinHandle<()>>,
+    drain_error: Option<ScreenError>,
 }
 impl NativeViewer {
     pub async fn open(
@@ -576,6 +578,7 @@ impl NativeViewer {
                 conn: conn.clone(),
                 life: life.clone(),
                 frames,
+                drain_error: None,
                 tasks: vec![heartbeat, intake],
             })
         };
@@ -639,16 +642,29 @@ impl NativeViewer {
         self.frames.close();
         self.conn.close(0u32.into(), b"owned cancel");
     }
-    pub async fn close(mut self) -> Result<()> {
+    /// Drain owned tasks without transferring their handles to the waiting future.
+    /// A caller may bound its wait; cancellation leaves unfinished handles here.
+    pub async fn close(&mut self) -> Result<()> {
         self.cancel();
-        for task in self.tasks.drain(..) {
-            tokio::time::timeout(Duration::from_secs(3), task)
-                .await
-                .map_err(timeout)?
-                .map_err(|_| ScreenError::Module(ModuleError::ProviderFailed))?;
-        }
-        Ok(())
+        drain_tasks(&mut self.tasks, &mut self.drain_error).await
     }
+    /// True only after every task handle has produced its terminal result.
+    pub fn is_drained(&self) -> bool {
+        self.tasks.is_empty()
+    }
+}
+async fn drain_tasks(
+    tasks: &mut Vec<JoinHandle<()>>,
+    failure: &mut Option<ScreenError>,
+) -> Result<()> {
+    while let Some(task) = tasks.last_mut() {
+        let result = task.await;
+        tasks.pop();
+        if result.is_err() {
+            *failure = Some(ScreenError::Module(ModuleError::ProviderFailed));
+        }
+    }
+    failure.map_or(Ok(()), Err)
 }
 impl Drop for NativeViewer {
     fn drop(&mut self) {
@@ -659,6 +675,49 @@ impl Drop for NativeViewer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn drain_retains_handles_and_errors_across_interrupted_waits() {
+        let (release, held) = tokio::sync::oneshot::channel::<()>();
+        let blocked = tokio::spawn(async move {
+            let _ = held.await;
+        });
+        let failed = tokio::spawn(std::future::pending::<()>());
+        failed.abort();
+        tokio::time::timeout(Duration::from_secs(1), async {
+            while !failed.is_finished() {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        let mut tasks = vec![blocked, failed];
+        let mut failure = None;
+        assert!(
+            tokio::time::timeout(
+                Duration::from_millis(10),
+                drain_tasks(&mut tasks, &mut failure)
+            )
+            .await
+            .is_err()
+        );
+        assert_eq!(tasks.len(), 1);
+        assert!(matches!(
+            failure,
+            Some(ScreenError::Module(ModuleError::ProviderFailed))
+        ));
+        release.send(()).unwrap();
+        assert!(matches!(
+            drain_tasks(&mut tasks, &mut failure).await,
+            Err(ScreenError::Module(ModuleError::ProviderFailed))
+        ));
+        assert!(tasks.is_empty());
+        assert!(matches!(
+            drain_tasks(&mut tasks, &mut failure).await,
+            Err(ScreenError::Module(ModuleError::ProviderFailed))
+        ));
+    }
+
     use nddev_device_sync_domain::{
         DeviceId,
         screen::{ViewPermit, ViewState},
@@ -1004,7 +1063,7 @@ mod tests {
     async fn close(
         host: Endpoint,
         viewer: Endpoint,
-        live: NativeViewer,
+        mut live: NativeViewer,
         cancel: CancellationToken,
         task: JoinHandle<Result<()>>,
     ) {

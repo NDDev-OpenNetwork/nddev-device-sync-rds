@@ -90,6 +90,12 @@ calculate network/capture age from a producer clock. A ready queued first stream
 can exhaust the three-second bound inside the nominal five-second startup.
 Normal unchanged idle uses the existing heartbeat and IDR refresh.
 
+`NativeViewer::close` borrows the viewer while joining its owned tasks. A caller
+may bound that wait; cancellation retains unfinished handles and any observed
+join failure. Keep the viewer until `is_drained()` confirms every handle has
+completed, and preserve the returned close error. Cancellation alone does not
+confirm cleanup.
+
 The separate `owned-screen-linux` CI gate runs the receiver subsystem on its own
 Xvfb, generated native keys and passive Core projection. The fixture test is
 ignored unless explicitly invoked under that owned display. It does not claim
@@ -98,7 +104,7 @@ other platforms. The runtime manifest retains the existing manager capabilities.
 
 For the exported SDK API, add `--owned-screen` to `check-library.py`. This profile
 puts `features=["owned-screen"]` on the downstream SDK dependency and compiles
-`qualification/owned-library.rs` against canonical Core752 types. Fetch/lock
+`qualification/owned-library.rs` against the canonical Core types. Fetch/lock
 adoption uses that same declared dependency profile; metadata, lint, build and
 any test commands also select its consumer feature. The gate checks the SDK
 feature node and exact public Git/Core/native sources. It retains the same
