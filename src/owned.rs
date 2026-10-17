@@ -132,10 +132,22 @@ impl OwnedEndpoint {
         config.secret_key = Some(key.clone());
         config.alpns = vec![rds_core::ALPN.to_vec()];
         config.validate().map_err(input)?;
+        let discovery = config.discovery;
         let endpoint = bind_endpoint(config).await.map_err(unavailable)?;
         if endpoint.id() != key.public() {
             endpoint.close().await;
             return Err(ScreenError::Denied);
+        }
+        // An identity-only viewer depends on the normal address lookup path.
+        // Binding a socket alone can publish an endpoint before a usable relay
+        // address exists. Keep this instance/key owned until readiness or close.
+        if discovery
+            && tokio::time::timeout(Duration::from_secs(10), endpoint.online())
+                .await
+                .is_err()
+        {
+            endpoint.close().await;
+            return Err(timeout(()));
         }
         Ok(Self {
             device,
@@ -421,6 +433,43 @@ mod tests {
             ScreenError::Expired
         );
     }
+    /// Transport readiness only; no NDS identity or media permission is fabricated.
+    #[tokio::test]
+    #[ignore = "requires actual network access to the configured discovery/relay services"]
+    async fn discovery_bind_is_dialable_by_identity() {
+        let viewer = OwnedEndpoint::bind(
+            DeviceId::new("owned-viewer").unwrap(),
+            [1; 16],
+            SecretKey::generate(),
+            EndpointConfig::default(),
+        )
+        .await
+        .unwrap();
+        let host = OwnedEndpoint::bind(
+            DeviceId::new("owned-host").unwrap(),
+            [2; 16],
+            SecretKey::generate(),
+            EndpointConfig::default(),
+        )
+        .await
+        .unwrap();
+        let result = tokio::time::timeout(Duration::from_secs(12), async {
+            tokio::join!(
+                viewer
+                    .endpoint
+                    .connect(EndpointAddr::new(host.endpoint.id()), rds_core::ALPN),
+                async { host.endpoint.accept().await.unwrap().await }
+            )
+        })
+        .await;
+        viewer.close().await;
+        host.close().await;
+        assert!(
+            matches!(result, Ok((Ok(_), Ok(_)))),
+            "ready endpoint was not discoverable by identity"
+        );
+    }
+
     #[tokio::test]
     async fn invalid_native_configuration_is_rejected_by_existing_validator() {
         let config = EndpointConfig {
